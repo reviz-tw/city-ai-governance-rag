@@ -1,0 +1,52 @@
+steps:
+  # 1. Build Docker image for RAG & MCP Backend
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:${_TAG}'
+      - '-t'
+      - '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:latest'
+      - '-f'
+      - 'backend/Dockerfile'
+      - 'backend'
+    id: 'build-backend'
+
+  # 2. Push image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '--all-tags'
+      - '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}'
+    id: 'push-image'
+
+  # 3. Deploy to Cloud Run with Cloud SQL connection
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE_NAME}'
+      - '--image=${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:${_TAG}'
+      - '--region=${_LOCATION}'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--port=8080'
+      - '--add-cloudsql-instances=${PROJECT_ID}:${_LOCATION}:${_SQL_INSTANCE}'
+      - '--set-env-vars=INSTANCE_CONNECTION_NAME=${PROJECT_ID}:${_LOCATION}:${_SQL_INSTANCE},DB_USER=rag_user,DB_PASSWORD=GovRAG2026SecurePass!,DB_NAME=city_governance,GCP_PROJECT_ID=${PROJECT_ID},GCP_REGION=${_LOCATION}'
+    id: 'deploy-cloud-run'
+
+images:
+  - '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:${_TAG}'
+  - '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:latest'
+
+substitutions:
+  _TAG: 'latest'
+  _LOCATION: 'asia-east1'
+  _REPO_NAME: 'haystack-dev'
+  _IMAGE_NAME: 'city-rag-backend-dev'
+  _SERVICE_NAME: 'city-rag-backend-dev'
+  _SQL_INSTANCE: 'city-rag-sql-dev'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

@@ -1,0 +1,30 @@
+version: 1.1.8
+
+cache: true
+
+# 介面自訂標題與客製化名稱
+interface:
+  privacyPolicy:
+    externalUrl: "https://reviz.tw"
+  termsOfService:
+    externalUrl: "https://reviz.tw"
+
+# 預設 AI 模型端點設定 (預設 Gemini，支援隨時擴充 Claude / OpenAI)
+endpoints:
+  google:
+    models:
+      default: 
+        - "gemini-1.5-flash"
+        - "gemini-1.5-pro"
+        - "gemini-2.0-flash"
+      fetch: false
+    titleConvo: true
+    titleModel: "gemini-1.5-flash"
+    modelDisplayLabel: "Google Gemini (全球城市 AI 治理顧問)"
+
+# 掛載全球城市 AI 治理 RAG & MCP Server 工具
+mcpServers:
+  cityGovernanceRag:
+    type: sse
+    url: "https://city-rag-backend-dev-wvswpuk2tq-de.a.run.app/mcp/sse"
+    description: "全球城市 AI 治理多語政策法規與案例知識庫 (Haystack + Pgvector)"
