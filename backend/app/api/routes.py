@@ -9,15 +9,15 @@ from app.models.schema import (
     GovernanceMetadata,
     DocumentCleanAndTagRequest,
     DocumentCleanAndTagResponse,
-    IndexDocumentRequest,
     IndexDocumentResponse,
-    RAGQueryRequest,
-    RAGQueryResponse,
     ChunkPreview
 )
 from app.pipelines.cleaner import clean_and_annotate_document, preview_chunks
-from app.pipelines.indexing import index_document_content
-from app.pipelines.rag import query_rag
+from app.pipelines.vertex_search import (
+    upload_document_to_gcs,
+    search_vertex_data_store,
+    query_city_governance_rag_vertex
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,6 @@ def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
         doc = docx.Document(io.BytesIO(file_bytes))
         return "\n".join([p.text for p in doc.paragraphs if p.text])
     else:
-        # Plain text / Markdown
         return file_bytes.decode("utf-8", errors="ignore")
 
 @router.post("/documents/clean-and-tag", response_model=DocumentCleanAndTagResponse)
@@ -65,7 +64,7 @@ async def api_upload_and_index(
     publication_year: Optional[int] = Form(None),
     auto_ai_tag: bool = Form(True)
 ):
-    """上傳文件、自動 AI 清理標註並寫入 Pgvector 向量庫"""
+    """上傳文件至 GCS 並透過 Vertex AI Search 進行自動建構與索引"""
     try:
         content_bytes = await file.read()
         extracted_text = extract_text_from_file(content_bytes, file.filename)
@@ -73,57 +72,63 @@ async def api_upload_and_index(
         if not extracted_text.strip():
             raise HTTPException(status_code=400, detail="未能從檔案中讀取有效文字。")
             
-        final_text = extracted_text
+        metadata_dict = {
+            "city": city or "全球",
+            "country": country or "",
+            "policy_domain": policy_domain or "公共治理與智慧城市",
+            "document_type": document_type or "政策白皮書",
+            "language": language or "zh-TW",
+            "publication_year": str(publication_year or 2025)
+        }
+        
         if auto_ai_tag:
             ai_res = clean_and_annotate_document(extracted_text, file.filename)
             meta = ai_res.suggested_metadata
-            final_text = ai_res.cleaned_text
+            metadata_dict.update({
+                "city": city or meta.city,
+                "country": country or meta.country,
+                "policy_domain": policy_domain or meta.policy_domain,
+                "document_type": document_type or meta.document_type,
+                "language": language or meta.language,
+                "publication_year": str(publication_year or meta.publication_year),
+                "ai_summary": meta.summary
+            })
             
-            # 若使用者有明確手動覆蓋欄位則採用手動設定
-            if city: meta.city = city
-            if country: meta.country = country
-            if policy_domain: meta.policy_domain = policy_domain
-            if document_type: meta.document_type = document_type
-            if language: meta.language = language
-            if publication_year: meta.publication_year = publication_year
-        else:
-            meta = GovernanceMetadata(
-                title=file.filename,
-                city=city or "未知城市",
-                country=country or "未知國家",
-                policy_domain=policy_domain or "公共治理與智慧城市",
-                document_type=document_type or "政策白皮書",
-                language=language or "zh-TW",
-                publication_year=publication_year or 2025
-            )
-            
-        res = index_document_content(final_text, meta)
+        # Upload original bytes to GCS bucket for Vertex AI Search ingestion
+        gcs_uri = upload_document_to_gcs(
+            file_bytes=content_bytes,
+            file_name=file.filename,
+            content_type=file.content_type or "application/pdf",
+            metadata=metadata_dict
+        )
+        
         return IndexDocumentResponse(
             success=True,
-            document_id=res["document_id"],
-            total_chunks=res["total_chunks"],
-            message=f"文件《{meta.title}》已成功切分為 {res['total_chunks']} 個切片並寫入 Pgvector 知識庫！"
+            document_id=file.filename,
+            total_chunks=1,
+            message=f"文件《{file.filename}》已成功上傳至 Cloud Storage ({gcs_uri}) 並同步至 Vertex AI Search 知識庫！"
         )
     except Exception as e:
         logger.error(f"檔案上傳與索引失敗: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/rag/query", response_model=RAGQueryResponse)
-async def api_query_rag(request: RAGQueryRequest):
-    """執行多語治理 RAG 檢索與問答"""
+@router.post("/rag/query")
+async def api_query_rag(
+    query: str = Form(...),
+    city: Optional[str] = Form(None),
+    language: Optional[str] = Form(None)
+):
+    """執行 Vertex AI Search 治理檢索與問答"""
     try:
-        return query_rag(
-            query=request.query,
-            cities=request.cities,
-            policy_domains=request.policy_domains,
-            languages=request.languages,
-            top_k=request.top_k,
-            response_language=request.response_language or "zh-TW"
+        return query_city_governance_rag_vertex(
+            query=query,
+            city_filter=city,
+            language_filter=language
         )
     except Exception as e:
-        logger.error(f"RAG 查詢失敗: {e}")
+        logger.error(f"Vertex AI RAG 查詢失敗: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/health")
 async def health_check():
-    return {"status": "ok", "service": "City AI Governance RAG & MCP Hub"}
+    return {"status": "ok", "service": "City AI Governance Vertex AI Search & MCP Hub"}

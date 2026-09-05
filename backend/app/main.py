@@ -7,17 +7,15 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from app.core.config import settings
-from app.core.db import init_db
 from app.api.routes import router as api_router
 from app.mcp.server import mcp
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("city-governance-rag")
+logger = logging.getLogger("city-governance-vertex-rag")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("正在初始化 全球城市 AI 治理 RAG & MCP 伺服器...")
-    init_db()
+    logger.info("正在初始化 全球城市 AI 治理 Vertex AI Search & MCP 伺服器...")
     yield
     logger.info("伺服器關閉。")
 
@@ -27,7 +25,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS Middleware (支援 LibreChat 與 Web 前端存取)
+# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -39,14 +37,13 @@ app.add_middleware(
 # 掛載 REST API
 app.include_router(api_router)
 
-# 掛載 FastMCP SSE 端點 (支援 LibreChat / Claude / Cursor 透過 MCP Protocol 對接)
-# FastMCP 提供 sse_app() 可直接作為子應用掛載
+# 掛載 FastMCP SSE 端點 (支援 Open WebUI / Claude / Cursor 透過 MCP Protocol 對接)
 try:
     mcp_app = mcp.sse_app()
     app.mount("/mcp", mcp_app)
     logger.info("MCP SSE 端點已成功掛載於 /mcp/sse")
 except Exception as e:
-    logger.warning(f"掛載 MCP SSE 端點時發生提示 (仍可透過內部調用): {e}")
+    logger.warning(f"掛載 MCP SSE 端點時發生提示: {e}")
 
 # 掛載 Admin UI 靜態檔案
 static_dir = os.path.join(os.path.dirname(__file__), "static")
@@ -59,7 +56,7 @@ async def root():
     if os.path.exists(index_file):
         return FileResponse(index_file)
     return {
-        "message": "Global City AI Governance RAG & MCP Hub is running.",
+        "message": "Global City AI Governance Vertex AI Search & MCP Hub is running.",
         "admin_ui": "/admin",
         "docs": "/docs",
         "mcp_endpoint": "/mcp/sse"
