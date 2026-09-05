@@ -34,7 +34,7 @@ steps:
       - '--port=8080'
       - '--memory=1Gi'
       - '--cpu=1'
-      - '--min-instances=1'
+      - '--min-instances=0'
       - '--cpu-boost'
       - '--set-env-vars=GCP_PROJECT_ID=${PROJECT_ID},GCP_REGION=${_LOCATION},VERTEX_DATA_STORE_ID=city-governance-datastore,GCS_BUCKET_NAME=${PROJECT_ID}-city-governance-docs,VERTEX_LOCATION=global'
     id: 'deploy-cloud-run'
