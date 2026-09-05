@@ -28,7 +28,37 @@ def upload_document_to_gcs(
     blob.upload_from_string(file_bytes, content_type=content_type)
     gcs_uri = f"gs://{settings.GCS_BUCKET_NAME}/documents/{file_name}"
     logger.info(f"Uploaded {file_name} to {gcs_uri}")
+    
+    # 即時觸發 Vertex AI Search 增量匯入處理
+    trigger_vertex_document_import(gcs_uri)
     return gcs_uri
+
+
+def trigger_vertex_document_import(gcs_uri: Optional[str] = None) -> Optional[str]:
+    """即時觸發 Vertex AI Search 增量匯入任務，對剛上傳的檔案進行解析、切片與向量化"""
+    try:
+        client = discoveryengine.DocumentServiceClient()
+        parent = (
+            f"projects/{settings.GCP_PROJECT_ID}/locations/{settings.VERTEX_LOCATION}/"
+            f"collections/default_collection/dataStores/{settings.VERTEX_DATA_STORE_ID}/"
+            f"branches/0"
+        )
+        uris = [gcs_uri] if gcs_uri else [f"gs://{settings.GCS_BUCKET_NAME}/documents/*"]
+        request = discoveryengine.ImportDocumentsRequest(
+            parent=parent,
+            gcs_source=discoveryengine.GcsSource(
+                input_uris=uris,
+                data_schema="content"
+            ),
+            reconciliation_mode=discoveryengine.ImportDocumentsRequest.ReconciliationMode.INCREMENTAL
+        )
+        operation = client.import_documents(request=request)
+        op_name = getattr(operation, "operation", {}).name if hasattr(operation, "operation") else str(operation)
+        logger.info(f"已即時觸發 Vertex AI Search 匯入任務: {op_name}")
+        return op_name
+    except Exception as e:
+        logger.warning(f"觸發即時 Vertex AI 匯入時提示 (將由排程自動同步): {e}")
+        return None
 
 
 def search_vertex_data_store(
