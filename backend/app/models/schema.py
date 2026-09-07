@@ -66,3 +66,10 @@ class RAGQueryResponse(BaseModel):
     query: str
     sources: List[RetrievedSource]
     model_used: str
+
+class ChatStreamRequest(BaseModel):
+    query: str = Field(..., description="使用者問題")
+    topic_id: Optional[str] = Field(None, description="主題焦點 ID")
+    city: Optional[str] = Field("台北", description="城市篩選")
+    language: Optional[str] = Field("zh-TW", description="語言代碼")
+

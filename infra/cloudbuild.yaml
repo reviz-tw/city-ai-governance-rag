@@ -8,8 +8,8 @@ steps:
       - '-t'
       - '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:latest'
       - '-f'
-      - 'backend/Dockerfile'
-      - 'backend'
+      - 'Dockerfile'
+      - '.'
     id: 'build-backend'
 
   # 2. Push image to Artifact Registry

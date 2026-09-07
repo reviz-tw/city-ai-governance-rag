@@ -1,7 +1,7 @@
 import logging
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -46,22 +46,54 @@ except Exception as e:
     logger.warning(f"掛載 MCP SSE 端點時發生提示: {e}")
 
 # 掛載 Admin UI 靜態檔案
-static_dir = os.path.join(os.path.dirname(__file__), "static")
-if os.path.exists(static_dir):
-    app.mount("/admin", StaticFiles(directory=static_dir, html=True), name="static")
+admin_static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(admin_static_dir):
+    app.mount("/admin", StaticFiles(directory=admin_static_dir, html=True), name="admin_static")
 
-@app.get("/")
-async def root():
-    index_file = os.path.join(static_dir, "index.html")
-    if os.path.exists(index_file):
-        return FileResponse(index_file)
-    return {
-        "message": "Global City AI Governance Vertex AI Search & MCP Hub is running.",
-        "admin_ui": "/admin",
-        "docs": "/docs",
-        "mcp_endpoint": "/mcp/sse"
-    }
+# 尋找前端 React SPA 編譯目錄 (支援 /app/web_dist, /app/static/dist, 或 ../web/dist)
+possible_web_dirs = [
+    os.path.join(os.path.dirname(__file__), "web_dist"),
+    os.path.join(os.path.dirname(__file__), "static", "dist"),
+    "/app/web_dist",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "web", "dist")),
+]
+web_dist_dir = None
+for d in possible_web_dirs:
+    if os.path.exists(d) and os.path.exists(os.path.join(d, "index.html")):
+        web_dist_dir = d
+        break
+
+if web_dist_dir:
+    logger.info(f"成功找到 React 前端編譯目錄: {web_dist_dir}")
+    assets_dir = os.path.join(web_dist_dir, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        # 排除 API, MCP, Admin 與文件路徑
+        if full_path.startswith(("api/", "mcp/", "admin", "docs", "openapi.json", "redoc")):
+            raise HTTPException(status_code=404, detail="Not Found")
+            
+        file_path = os.path.join(web_dist_dir, full_path)
+        if full_path and os.path.exists(file_path) and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(os.path.join(web_dist_dir, "index.html"))
+else:
+    logger.info("未偵測到 React 前端編譯目錄，使用內建預設首頁。")
+    @app.get("/")
+    async def root():
+        index_file = os.path.join(admin_static_dir, "index.html")
+        if os.path.exists(index_file):
+            return FileResponse(index_file)
+        return {
+            "message": "Global City AI Governance Vertex AI Search & MCP Hub is running.",
+            "admin_ui": "/admin",
+            "docs": "/docs",
+            "mcp_endpoint": "/mcp/sse"
+        }
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app.main:app", host="0.0.0.0", port=8080, reload=True)
+

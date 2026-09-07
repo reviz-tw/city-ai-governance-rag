@@ -330,3 +330,80 @@ def query_city_governance_rag_vertex(
         "sources": sources,
         "search_results_count": len(search_results)
     }
+
+
+def stream_city_governance_rag_vertex(
+    query: str,
+    city_filter: Optional[str] = None,
+    language_filter: Optional[str] = None
+):
+    """Yields Server-Sent Events (SSE) streaming chunks and source citations for interactive UI."""
+    import json
+    
+    filter_parts = []
+    if city_filter:
+        filter_parts.append(f'city = ANY("{city_filter}")')
+    if language_filter:
+        filter_parts.append(f'language = ANY("{language_filter}")')
+        
+    filter_expr = " AND ".join(filter_parts) if filter_parts else None
+    
+    search_results = search_vertex_data_store(query=query, page_size=5, filter_expr=filter_expr)
+    if not search_results:
+        logger.info("Vertex AI Search returned empty, using direct GCS fallback...")
+        search_results = search_gcs_documents_fallback(query=query, top_k=4)
+    
+    context_blocks = []
+    sources = []
+    for idx, res in enumerate(search_results, start=1):
+        snippets_text = " ".join([s.get("snippet", "") for s in res.get("snippets", []) if isinstance(s, dict)])
+        context_blocks.append(f"[{idx}] 文件: {res['title']}\n摘要片段: {snippets_text}")
+        sources.append({
+            "citation_id": idx,
+            "title": res["title"],
+            "link": res.get("link", ""),
+            "snippet": snippets_text[:300] if snippets_text else ""
+        })
+        
+    # 1. Send sources metadata event first
+    yield f"data: {json.dumps({'type': 'sources', 'sources': sources}, ensure_ascii=False)}\n\n"
+    
+    context_str = "\n\n".join(context_blocks)
+    prompt = f"""你是一位專精「全球城市 AI 治理 (Global City AI Governance)」與「台北市智慧城市與 AI 政策」的高級研究顧問。
+請根據以下檢索自城市政策資料庫與局處首長/專家訪談逐字稿的真實資料，專業、嚴謹且客觀地回答使用者問題。
+
+【檢索資料庫內容】:
+{context_str if context_str else "（目前尚未檢索到相關特定文件，請基於台北市政府 AI 作業指引與智慧城市治理架構進行客觀分析）"}
+
+【使用者問題】:
+{query}
+
+【回答格式要求】:
+1. 若有引用檢索資料中的具體觀點、數據或局處訪談，請在句子後方精確標註引用編號（例如 [1]、[2]）。
+2. 提供條理清晰的結構（例如：政策背景 / 核心發現 / 局處實務考量 / 政策建議或結論）。
+3. 語氣專業、客觀中立、言之有據。
+4. 使用繁體中文輸出。
+"""
+
+    try:
+        if settings.GEMINI_API_KEY:
+            import google.generativeai as genai
+            genai.configure(api_key=settings.GEMINI_API_KEY)
+            model = genai.GenerativeModel("gemini-2.0-flash")
+            response = model.generate_content(prompt, stream=True)
+            for chunk in response:
+                if chunk.text:
+                    yield f"data: {json.dumps({'type': 'chunk', 'text': chunk.text}, ensure_ascii=False)}\n\n"
+        else:
+            model = GenerativeModel(settings.GEMINI_PRO_MODEL)
+            response = model.generate_content(prompt, stream=True)
+            for chunk in response:
+                if chunk.text:
+                    yield f"data: {json.dumps({'type': 'chunk', 'text': chunk.text}, ensure_ascii=False)}\n\n"
+    except Exception as e:
+        logger.error(f"Stream LLM error: {e}")
+        fallback_msg = f"\n\n（檢索完成，共檢索到 {len(search_results)} 份相關政策文獻。如需更多資訊，可點擊右側引用出處查閱原文片段。）"
+        yield f"data: {json.dumps({'type': 'chunk', 'text': fallback_msg}, ensure_ascii=False)}\n\n"
+
+    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
