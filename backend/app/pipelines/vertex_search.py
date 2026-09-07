@@ -395,14 +395,24 @@ def stream_city_governance_rag_vertex(
                 if chunk.text:
                     yield f"data: {json.dumps({'type': 'chunk', 'text': chunk.text}, ensure_ascii=False)}\n\n"
         else:
-            model = GenerativeModel(settings.GEMINI_PRO_MODEL)
-            response = model.generate_content(prompt, stream=True)
-            for chunk in response:
-                if chunk.text:
-                    yield f"data: {json.dumps({'type': 'chunk', 'text': chunk.text}, ensure_ascii=False)}\n\n"
+            try:
+                vertexai.init(project=settings.GCP_PROJECT_ID, location="us-central1")
+                model = GenerativeModel("gemini-1.5-flash")
+                response = model.generate_content(prompt, stream=True)
+                for chunk in response:
+                    if chunk.text:
+                        yield f"data: {json.dumps({'type': 'chunk', 'text': chunk.text}, ensure_ascii=False)}\n\n"
+            except Exception as v_err:
+                logger.warning(f"Vertex AI us-central1 fallback, trying asia-east1 or gemini-2.0-flash: {v_err}")
+                vertexai.init(project=settings.GCP_PROJECT_ID, location=settings.GCP_REGION)
+                model = GenerativeModel("gemini-1.5-flash")
+                response = model.generate_content(prompt, stream=True)
+                for chunk in response:
+                    if chunk.text:
+                        yield f"data: {json.dumps({'type': 'chunk', 'text': chunk.text}, ensure_ascii=False)}\n\n"
     except Exception as e:
         logger.error(f"Stream LLM error: {e}")
-        fallback_msg = f"\n\n（檢索完成，共檢索到 {len(search_results)} 份相關政策文獻。如需更多資訊，可點擊右側引用出處查閱原文片段。）"
+        fallback_msg = f"\n\n（檢索完成，共檢索到 {len(search_results)} 份相關政策文獻。如需更多資訊，可點擊上方或右側引用出處查閱原文片段。）"
         yield f"data: {json.dumps({'type': 'chunk', 'text': fallback_msg}, ensure_ascii=False)}\n\n"
 
     yield f"data: {json.dumps({'type': 'done'})}\n\n"
