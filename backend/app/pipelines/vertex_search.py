@@ -1,9 +1,13 @@
+import io
 import logging
 from typing import List, Dict, Any, Optional
 from google.cloud import discoveryengine_v1 as discoveryengine
 from google.cloud import storage
 import google.generativeai as genai
+from pypdf import PdfReader
+import docx
 from app.core.config import settings
+from app.pipelines.cleaner import preview_chunks
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +63,90 @@ def trigger_vertex_document_import(gcs_uri: Optional[str] = None) -> Optional[st
     except Exception as e:
         logger.warning(f"觸發即時 Vertex AI 匯入時提示 (將由排程自動同步): {e}")
         return None
+
+
+def list_governance_documents() -> List[Dict[str, Any]]:
+    """列出儲存在 GCS 儲存桶與 Vertex AI Search 中的所有政策文件清單及其狀態"""
+    documents = []
+    try:
+        client = storage.Client(project=settings.GCP_PROJECT_ID)
+        bucket = client.bucket(settings.GCS_BUCKET_NAME)
+        blobs = bucket.list_blobs(prefix="documents/")
+        
+        for blob in blobs:
+            if blob.name == "documents/":
+                continue
+            filename = blob.name.replace("documents/", "")
+            meta = blob.metadata or {}
+            
+            documents.append({
+                "filename": filename,
+                "gcs_uri": f"gs://{settings.GCS_BUCKET_NAME}/{blob.name}",
+                "size_bytes": blob.size or 0,
+                "size_formatted": f"{(blob.size or 0) / 1024:.1f} KB",
+                "updated_at": blob.updated.strftime("%Y-%m-%d %H:%M:%S") if blob.updated else "未知",
+                "content_type": blob.content_type or "application/octet-stream",
+                "city": meta.get("city", "全球"),
+                "country": meta.get("country", ""),
+                "policy_domain": meta.get("policy_domain", "公共治理與智慧城市"),
+                "document_type": meta.get("document_type", "政策文件"),
+                "language": meta.get("language", "zh-TW"),
+                "publication_year": meta.get("publication_year", "2025"),
+                "ai_summary": meta.get("ai_summary", "無摘要"),
+                "status": "INDEXED"
+            })
+    except Exception as e:
+        logger.error(f"列出知識庫文件失敗: {e}")
+    return documents
+
+
+def get_document_chunks_detail(filename: str) -> Dict[str, Any]:
+    """獲取指定文件的詳細資訊與切片 (Chunks) 結構"""
+    try:
+        client = storage.Client(project=settings.GCP_PROJECT_ID)
+        bucket = client.bucket(settings.GCS_BUCKET_NAME)
+        blob = bucket.blob(f"documents/{filename}")
+        
+        if not blob.exists():
+            return {"error": f"找不到文件: {filename}"}
+            
+        file_bytes = blob.download_as_bytes()
+        ext = filename.split(".")[-1].lower() if "." in filename else ""
+        
+        # 擷取本文文字
+        text = ""
+        if ext == "pdf":
+            reader = PdfReader(io.BytesIO(file_bytes))
+            pages = [page.extract_text() or "" for page in reader.pages]
+            text = "\n\n".join(pages)
+        elif ext in ["docx", "doc"]:
+            doc = docx.Document(io.BytesIO(file_bytes))
+            text = "\n".join([p.text for p in doc.paragraphs if p.text])
+        else:
+            text = file_bytes.decode("utf-8", errors="ignore")
+            
+        meta = blob.metadata or {}
+        
+        # 切片檢視
+        chunks_preview = preview_chunks(
+            text=text,
+            metadata=meta,
+            chunk_size=500,
+            chunk_overlap=80
+        )
+        
+        return {
+            "filename": filename,
+            "gcs_uri": f"gs://{settings.GCS_BUCKET_NAME}/documents/{filename}",
+            "size_formatted": f"{(blob.size or 0) / 1024:.1f} KB",
+            "metadata": meta,
+            "total_chunks": len(chunks_preview),
+            "total_characters": len(text),
+            "chunks": [c.model_dump() for c in chunks_preview]
+        }
+    except Exception as e:
+        logger.error(f"讀取文件切片失敗: {e}")
+        return {"error": str(e)}
 
 
 def search_vertex_data_store(

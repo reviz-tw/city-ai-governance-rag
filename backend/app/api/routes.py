@@ -129,6 +129,31 @@ async def api_query_rag(
         logger.error(f"Vertex AI RAG 查詢失敗: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/documents/list")
+async def api_list_documents():
+    """列出儲存在 GCS 儲存桶與 Vertex AI Search 中的所有政策文件清單"""
+    try:
+        from app.pipelines.vertex_search import list_governance_documents
+        return list_governance_documents()
+    except Exception as e:
+        logger.error(f"獲取文件清單失敗: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/documents/chunks/{filename:path}")
+async def api_get_document_chunks(filename: str):
+    """獲取指定文件的詳細資訊與切片 (Chunks) 結構"""
+    try:
+        from app.pipelines.vertex_search import get_document_chunks_detail
+        res = get_document_chunks_detail(filename)
+        if "error" in res:
+            raise HTTPException(status_code=404, detail=res["error"])
+        return res
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"獲取切片資訊失敗: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/health")
 async def health_check():
     return {"status": "ok", "service": "City AI Governance Vertex AI Search & MCP Hub"}
