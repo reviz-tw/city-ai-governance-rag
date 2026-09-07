@@ -2,14 +2,17 @@ import json
 import logging
 import re
 from typing import List, Dict, Any, Optional
-import google.generativeai as genai
+import vertexai
+from vertexai.generative_models import GenerativeModel
 from app.core.config import settings
 from app.models.schema import GovernanceMetadata, ChunkPreview, DocumentCleanAndTagResponse
 
 logger = logging.getLogger(__name__)
 
-if settings.GEMINI_API_KEY:
-    genai.configure(api_key=settings.GEMINI_API_KEY)
+try:
+    vertexai.init(project=settings.GCP_PROJECT_ID, location=settings.GCP_REGION)
+except Exception as e:
+    logger.warning(f"vertexai.init warning: {e}")
 
 CLEANER_PROMPT = """你是一位「全球城市 AI 治理研究」的資深顧問與知識工程師。
 你的任務是分析使用者提供的政策文件或報告，進行結構化預處理、雜訊清理，並抽取專業的 Metadata 與重點摘要。
@@ -47,7 +50,7 @@ CLEANER_PROMPT = """你是一位「全球城市 AI 治理研究」的資深顧�
 def clean_and_annotate_document(raw_text: str, filename: Optional[str] = None) -> DocumentCleanAndTagResponse:
     """使用 Gemini LLM 進行文件預清理與專業治理 Metadata 標註"""
     try:
-        model = genai.GenerativeModel(
+        model = GenerativeModel(
             model_name=settings.GEMINI_MODEL,
             generation_config={"response_mime_type": "application/json"}
         )

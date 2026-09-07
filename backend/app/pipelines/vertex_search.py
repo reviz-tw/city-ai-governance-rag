@@ -3,7 +3,8 @@ import logging
 from typing import List, Dict, Any, Optional
 from google.cloud import discoveryengine_v1 as discoveryengine
 from google.cloud import storage
-import google.generativeai as genai
+import vertexai
+from vertexai.generative_models import GenerativeModel
 from pypdf import PdfReader
 import docx
 from app.core.config import settings
@@ -11,8 +12,10 @@ from app.pipelines.cleaner import preview_chunks
 
 logger = logging.getLogger(__name__)
 
-if settings.GEMINI_API_KEY:
-    genai.configure(api_key=settings.GEMINI_API_KEY)
+try:
+    vertexai.init(project=settings.GCP_PROJECT_ID, location=settings.GCP_REGION)
+except Exception as e:
+    logger.warning(f"vertexai.init warning: {e}")
 
 
 def upload_document_to_gcs(
@@ -251,7 +254,7 @@ def query_city_governance_rag_vertex(
 3. 支持繁體中文或使用者提問的語言輸出。
 """
 
-    model = genai.GenerativeModel(settings.GEMINI_PRO_MODEL)
+    model = GenerativeModel(settings.GEMINI_PRO_MODEL)
     response = model.generate_content(prompt)
     
     return {
