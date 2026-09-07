@@ -248,6 +248,12 @@ def query_city_governance_rag_vertex(
 【使用者問題】:
 {query}
 
+【回答要求】:
+1. 若有引用上述文件，請在句子後方標註引用編號（例如 [1]、[2]）。
+2. 提供清晰的結構（政策背景、關鍵規範、城市實踐對比、建議或結論）。
+3. 支持繁體中文或使用者提問的語言輸出。
+"""
+
     answer_text = ""
     try:
         if settings.GEMINI_API_KEY:
