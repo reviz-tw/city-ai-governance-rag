@@ -209,6 +209,54 @@ def search_vertex_data_store(
         return []
 
 
+def search_gcs_documents_fallback(query: str, top_k: int = 4) -> List[Dict[str, Any]]:
+    """當 Vertex AI 索引建構中時，直接從 GCS 政策文件提取相關章節內容作為 Grounding 依據"""
+    results = []
+    try:
+        client = storage.Client(project=settings.GCP_PROJECT_ID)
+        bucket = client.bucket(settings.GCS_BUCKET_NAME)
+        blobs = list(bucket.list_blobs(prefix="documents/"))
+        
+        query_lower = query.lower()
+        keywords = [w for w in ["指引", "1999", "客服", "人事", "資訊局", "研考會", "民主", "智慧城市", "補助", "生成式", "作業", "規範", "風險", "透明"] if w in query_lower]
+        
+        matched_blobs = []
+        for b in blobs:
+            if b.name.endswith("/"): continue
+            fname = b.name.replace("documents/", "")
+            score = sum(2 for kw in keywords if kw in fname.lower())
+            matched_blobs.append((score, b, fname))
+            
+        matched_blobs.sort(key=lambda x: x[0], reverse=True)
+        
+        for score, blob, fname in matched_blobs[:top_k]:
+            ext = fname.split(".")[-1].lower()
+            file_bytes = blob.download_as_bytes()
+            text = ""
+            if ext == "pdf":
+                reader = PdfReader(io.BytesIO(file_bytes))
+                pages = [p.extract_text() or "" for p in reader.pages[:15]]
+                text = "\n".join(pages)
+            elif ext in ["docx", "doc"]:
+                doc = docx.Document(io.BytesIO(file_bytes))
+                text = "\n".join([p.text for p in doc.paragraphs[:50] if p.text])
+            else:
+                text = file_bytes.decode("utf-8", errors="ignore")[:8000]
+                
+            if text.strip():
+                results.append({
+                    "id": fname,
+                    "title": fname,
+                    "link": f"gs://{settings.GCS_BUCKET_NAME}/{blob.name}",
+                    "snippets": [{"snippet": text[:2500]}],
+                    "score": 0.95 if score > 0 else 0.8,
+                    "metadata": blob.metadata or {}
+                })
+    except Exception as e:
+        logger.error(f"Fallback search error: {e}")
+    return results
+
+
 def query_city_governance_rag_vertex(
     query: str,
     city_filter: Optional[str] = None,
@@ -224,6 +272,9 @@ def query_city_governance_rag_vertex(
     filter_expr = " AND ".join(filter_parts) if filter_parts else None
     
     search_results = search_vertex_data_store(query=query, page_size=5, filter_expr=filter_expr)
+    if not search_results:
+        logger.info("Vertex AI Search returned empty (indexing in progress), using direct GCS document reader fallback...")
+        search_results = search_gcs_documents_fallback(query=query, top_k=4)
     
     # Build context from Vertex Search results
     context_blocks = []
