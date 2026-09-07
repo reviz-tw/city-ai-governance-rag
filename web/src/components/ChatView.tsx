@@ -30,6 +30,7 @@ export const ChatView: FC<ChatViewProps> = ({
   onClearHistory,
 }) => {
   const [inputText, setInputText] = useState('');
+  const [isComposing, setIsComposing] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -39,17 +40,21 @@ export const ChatView: FC<ChatViewProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    if (!inputText.trim() || loading) return;
+  const handleSubmit = (e?: FormEvent) => {
+    if (e) e.preventDefault();
+    if (!inputText.trim() || loading || isComposing) return;
     onSendMessage(inputText.trim());
     setInputText('');
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // 支援中文輸入法 (IME): 在選字/組字尚未結束時 (isComposing) 不觸發送出
     if (e.key === 'Enter' && !e.shiftKey) {
+      if (isComposing || (e.nativeEvent && (e.nativeEvent as any).isComposing)) {
+        return;
+      }
       e.preventDefault();
-      handleSubmit(e);
+      handleSubmit();
     }
   };
 
@@ -354,9 +359,11 @@ export const ChatView: FC<ChatViewProps> = ({
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyDown}
+              onCompositionStart={() => setIsComposing(true)}
+              onCompositionEnd={() => setIsComposing(false)}
               placeholder="輸入政策問題（如：1999 客服導入 AI 的效益評估結論為何？Enter 發送，Shift+Enter 換行）..."
-              rows={1}
-              className="w-full bg-transparent border-0 resize-none text-xs sm:text-sm text-slate-800 focus:outline-hidden max-h-32"
+              rows={2}
+              className="w-full bg-transparent border-0 resize-none text-xs sm:text-sm text-slate-800 focus:outline-hidden max-h-32 leading-relaxed"
               disabled={loading}
             />
           </div>

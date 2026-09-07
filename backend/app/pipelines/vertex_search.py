@@ -305,16 +305,15 @@ def query_city_governance_rag_vertex(
 3. 支持繁體中文或使用者提問的語言輸出。
 """
 
-    answer_text = ""
     try:
         if settings.GEMINI_API_KEY:
             import google.generativeai as genai
             genai.configure(api_key=settings.GEMINI_API_KEY)
-            model = genai.GenerativeModel("gemini-1.5-pro")
+            model = genai.GenerativeModel("gemini-3.6-flash")
             response = model.generate_content(prompt)
             answer_text = response.text
         else:
-            model = GenerativeModel(settings.GEMINI_PRO_MODEL)
+            model = GenerativeModel("gemini-1.5-flash")
             response = model.generate_content(prompt)
             answer_text = response.text
     except Exception as e:
@@ -389,11 +388,20 @@ def stream_city_governance_rag_vertex(
         if settings.GEMINI_API_KEY:
             import google.generativeai as genai
             genai.configure(api_key=settings.GEMINI_API_KEY)
-            model = genai.GenerativeModel("gemini-2.0-flash")
-            response = model.generate_content(prompt, stream=True)
-            for chunk in response:
-                if chunk.text:
-                    yield f"data: {json.dumps({'type': 'chunk', 'text': chunk.text}, ensure_ascii=False)}\n\n"
+            for m_name in [settings.GEMINI_MODEL, "gemini-3.6-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash"]:
+                try:
+                    model = genai.GenerativeModel(m_name)
+                    response = model.generate_content(prompt, stream=True)
+                    has_output = False
+                    for chunk in response:
+                        if chunk.text:
+                            has_output = True
+                            yield f"data: {json.dumps({'type': 'chunk', 'text': chunk.text}, ensure_ascii=False)}\n\n"
+                    if has_output:
+                        break
+                except Exception as m_err:
+                    logger.warning(f"Google GenAI error with model {m_name}: {m_err}")
+                    continue
         else:
             try:
                 vertexai.init(project=settings.GCP_PROJECT_ID, location="us-central1")
@@ -403,13 +411,7 @@ def stream_city_governance_rag_vertex(
                     if chunk.text:
                         yield f"data: {json.dumps({'type': 'chunk', 'text': chunk.text}, ensure_ascii=False)}\n\n"
             except Exception as v_err:
-                logger.warning(f"Vertex AI us-central1 fallback, trying asia-east1 or gemini-2.0-flash: {v_err}")
-                vertexai.init(project=settings.GCP_PROJECT_ID, location=settings.GCP_REGION)
-                model = GenerativeModel("gemini-1.5-flash")
-                response = model.generate_content(prompt, stream=True)
-                for chunk in response:
-                    if chunk.text:
-                        yield f"data: {json.dumps({'type': 'chunk', 'text': chunk.text}, ensure_ascii=False)}\n\n"
+                logger.warning(f"Vertex AI fallback: {v_err}")
     except Exception as e:
         logger.error(f"Stream LLM error: {e}")
         fallback_msg = f"\n\n（檢索完成，共檢索到 {len(search_results)} 份相關政策文獻。如需更多資訊，可點擊上方或右側引用出處查閱原文片段。）"
