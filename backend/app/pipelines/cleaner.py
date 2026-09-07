@@ -10,7 +10,7 @@ from app.models.schema import GovernanceMetadata, ChunkPreview, DocumentCleanAnd
 logger = logging.getLogger(__name__)
 
 try:
-    vertexai.init(project=settings.GCP_PROJECT_ID, location=settings.GCP_REGION)
+    vertexai.init(project=settings.GCP_PROJECT_ID, location="us-central1")
 except Exception as e:
     logger.warning(f"vertexai.init warning: {e}")
 
