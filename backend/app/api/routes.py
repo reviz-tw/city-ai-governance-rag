@@ -139,6 +139,17 @@ async def api_list_documents():
         logger.error(f"獲取文件清單失敗: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/documents/sync-vertex")
+async def api_sync_vertex():
+    """手動觸發 Vertex AI Search 對 GCS 儲存桶進行全量/增量掃描與索引建構"""
+    try:
+        from app.pipelines.vertex_search import trigger_vertex_document_import
+        op = trigger_vertex_document_import()
+        return {"success": True, "message": "已成功觸發 Vertex AI Search 增量建構任務！", "operation": op}
+    except Exception as e:
+        logger.error(f"觸發 Vertex AI 同步失敗: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/documents/chunks/{filename:path}")
 async def api_get_document_chunks(filename: str):
     """獲取指定文件的詳細資訊與切片 (Chunks) 結構"""
