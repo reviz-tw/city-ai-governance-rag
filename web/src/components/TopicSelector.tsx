@@ -1,4 +1,4 @@
-import React from 'react';
+import { FC } from 'react';
 import { Topic } from '../types';
 import { PhoneCall, ShieldCheck, Users, Globe2, ChevronRight } from 'lucide-react';
 
@@ -15,7 +15,7 @@ const getTopicIcon = (id: string) => {
   return <Globe2 className="w-5 h-5 text-emerald-500" />;
 };
 
-export const TopicSelector: React.FC<TopicSelectorProps> = ({
+export const TopicSelector: FC<TopicSelectorProps> = ({
   topics,
   selectedTopicId,
   onSelectTopic,

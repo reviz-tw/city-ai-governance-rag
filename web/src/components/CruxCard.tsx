@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, FC } from 'react';
 import { Crux } from '../types';
 import { CheckCircle2, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -7,7 +7,7 @@ interface CruxCardProps {
   index: number;
 }
 
-export const CruxCard: React.FC<CruxCardProps> = ({ crux, index }) => {
+export const CruxCard: FC<CruxCardProps> = ({ crux, index }) => {
   const [expanded, setExpanded] = useState(true);
 
   return (

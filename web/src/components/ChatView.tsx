@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, FC, FormEvent, KeyboardEvent } from 'react';
 import { Topic, ChatMessage, Citation } from '../types';
 import {
   Send,
@@ -9,10 +9,10 @@ import {
   Check,
   RotateCcw,
   BookOpen,
-  ExternalLink,
   HelpCircle,
   X
 } from 'lucide-react';
+
 
 interface ChatViewProps {
   topic: Topic;
@@ -22,7 +22,7 @@ interface ChatViewProps {
   onClearHistory: () => void;
 }
 
-export const ChatView: React.FC<ChatViewProps> = ({
+export const ChatView: FC<ChatViewProps> = ({
   topic,
   messages,
   loading,
@@ -39,14 +39,14 @@ export const ChatView: React.FC<ChatViewProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!inputText.trim() || loading) return;
     onSendMessage(inputText.trim());
     setInputText('');
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit(e);

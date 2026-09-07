@@ -1,4 +1,4 @@
-import React from 'react';
+import { FC } from 'react';
 import { Sparkles, Database, Scale, BookOpen, ExternalLink, ShieldCheck } from 'lucide-react';
 
 interface HeaderProps {
@@ -7,7 +7,7 @@ interface HeaderProps {
   documentCount: number;
 }
 
-export const Header: React.FC<HeaderProps> = ({
+export const Header: FC<HeaderProps> = ({
   activeTab,
   onSelectTab,
   documentCount

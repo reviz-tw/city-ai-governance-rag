@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { TopicSelector } from './components/TopicSelector';
 import { CruxCard } from './components/CruxCard';
 import { ChatView } from './components/ChatView';
-import { Topic, ChatMessage, GovernanceDocument } from './types';
-import { Sparkles, BookOpen, Layers, ShieldCheck } from 'lucide-react';
+import { Topic, ChatMessage, GovernanceDocument, Citation } from './types';
+import { Sparkles, BookOpen, Layers } from 'lucide-react';
+
 
 const FALLBACK_TOPICS: Topic[] = [
   {
@@ -237,7 +238,7 @@ export default function App() {
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let accumulatedText = '';
-      let collectedCitations = [];
+      let collectedCitations: Citation[] = [];
 
       if (reader) {
         while (true) {
