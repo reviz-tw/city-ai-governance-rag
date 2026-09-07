@@ -4,7 +4,7 @@ import { TopicSelector } from './components/TopicSelector';
 import { CruxCard } from './components/CruxCard';
 import { ChatView } from './components/ChatView';
 import { Topic, ChatMessage, GovernanceDocument, Citation } from './types';
-import { Sparkles, BookOpen, Layers } from 'lucide-react';
+import { Layers } from 'lucide-react';
 
 
 const FALLBACK_TOPICS: Topic[] = [
@@ -311,135 +311,50 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800">
       {/* Header */}
-      <Header
-        activeTab={activeTab}
-        onSelectTab={setActiveTab}
-        documentCount={documents.length || 22}
-      />
+      <Header documentCount={documents.length || 22} />
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {/* TAB 1: AI 政策顧問對話 (Main Chat View) */}
-        {activeTab === 'chat' && (
-          <div className="space-y-6">
-            {/* Topic Switcher Bar */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-bold text-slate-700 tracking-wide uppercase flex items-center space-x-1.5">
-                  <Layers className="w-4 h-4 text-sky-600" />
-                  <span>台北市 AI 治理焦點專題</span>
-                </h2>
-                <span className="text-xs text-slate-500">點擊專題切換探討領域</span>
-              </div>
-              <TopicSelector
-                topics={topics}
-                selectedTopicId={selectedTopicId}
-                onSelectTopic={setSelectedTopicId}
-              />
-            </div>
-
-            {/* Cruxes Preview for current topic */}
-            {currentTopic.keyCruxes && currentTopic.keyCruxes.length > 0 && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-                    📌 專題核心焦點與視角剖析
-                  </h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {currentTopic.keyCruxes.map((crux, idx) => (
-                    <CruxCard key={idx} crux={crux} index={idx} />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Chat Interface */}
-            <ChatView
-              topic={currentTopic}
-              messages={currentMessages}
-              loading={loading}
-              onSendMessage={handleSendMessage}
-              onClearHistory={handleClearHistory}
-            />
+        {/* Topic Switcher Bar */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-bold text-slate-700 tracking-wide uppercase flex items-center space-x-1.5">
+              <Layers className="w-4 h-4 text-sky-600" />
+              <span>台北市 AI 治理焦點專題</span>
+            </h2>
+            <span className="text-xs text-slate-500">點擊專題切換探討領域</span>
           </div>
-        )}
+          <TopicSelector
+            topics={topics}
+            selectedTopicId={selectedTopicId}
+            onSelectTopic={setSelectedTopicId}
+          />
+        </div>
 
-        {/* TAB 2: 政策文獻庫總覽 (Clean Document Overview) */}
-        {activeTab === 'documents' && (
-          <div className="space-y-4">
-            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-              <div className="flex items-center space-x-2 text-sky-700 font-bold text-base mb-1">
-                <BookOpen className="w-5 h-5" />
-                <span>已索引之台北市 AI 治理政策文獻與訪談逐字稿</span>
-              </div>
-              <p className="text-xs text-slate-500">
-                本系統已匯入 22 份台北市政府政策報告、研究評估與各局處長一線訪談資料，所有問答皆經由 Vertex AI Search 進行語意檢索與出處校驗。
-              </p>
+        {/* Cruxes Preview for current topic */}
+        {currentTopic.keyCruxes && currentTopic.keyCruxes.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                📌 專題核心焦點與視角剖析
+              </h3>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {(documents.length > 0 ? documents : [
-                { filename: "1999市民熱線導入AI人工智慧最適方案評估研究.pdf", policy_domain: "市民客服", document_type: "研究報告", size_formatted: "1.2 MB", updated_at: "2026-09-07" },
-                { filename: "臺北市政府使用人工智慧作業指引.docx", policy_domain: "法規指引", document_type: "作業指引", size_formatted: "45 KB", updated_at: "2026-09-07" },
-                { filename: "20260504 北市府資訊局局長訪談.mp3", policy_domain: "局處訪談", document_type: "首長訪談逐字稿", size_formatted: "38.5 MB", updated_at: "2026-09-07" },
-                { filename: "20260423_北市府人事處訪談.mp4", policy_domain: "局處訪談", document_type: "局處訪談逐字稿", size_formatted: "120 MB", updated_at: "2026-09-07" },
-                { filename: "1130828-臺北智慧城市對外簡報(TPMO).pdf", policy_domain: "智慧城市", document_type: "簡報白皮書", size_formatted: "5.4 MB", updated_at: "2026-09-07" },
-                { filename: "20260505研考會話務管理組蔡組長訪談.mp3", policy_domain: "1999客服", document_type: "業務訪談逐字稿", size_formatted: "28 MB", updated_at: "2026-09-07" }
-              ]).map((doc: any, i: number) => (
-                <div key={i} className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs hover:shadow-sm transition-shadow">
-                  <div className="flex items-start justify-between mb-2">
-                    <span className="text-[10px] font-semibold bg-sky-50 text-sky-700 px-2 py-0.5 rounded border border-sky-200">
-                      {doc.policy_domain || '市政治理'}
-                    </span>
-                    <span className="text-[10px] text-slate-400">{doc.size_formatted}</span>
-                  </div>
-                  <h4 className="font-bold text-slate-800 text-sm mb-1 line-clamp-2 leading-snug">
-                    {doc.filename}
-                  </h4>
-                  <p className="text-xs text-slate-500 line-clamp-2 mt-1">
-                    {doc.ai_summary || doc.document_type || '台北市政府政策研究與訪談材料'}
-                  </p>
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {currentTopic.keyCruxes.map((crux, idx) => (
+                <CruxCard key={idx} crux={crux} index={idx} />
               ))}
             </div>
           </div>
         )}
 
-        {/* TAB 3: 核心爭點矩陣全貌 */}
-        {activeTab === 'cruxes' && (
-          <div className="space-y-6">
-            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-              <div className="flex items-center space-x-2 text-indigo-700 font-bold text-base mb-1">
-                <Sparkles className="w-5 h-5" />
-                <span>台北市 AI 治理核心爭點全景矩陣</span>
-              </div>
-              <p className="text-xs text-slate-500">
-                整理自台北市政府各局處首長訪談、研考會 1999 評估研究與作業指引，呈現公務機關推動 AI 治理時面臨的關鍵權衡。
-              </p>
-            </div>
-
-            <div className="space-y-6">
-              {topics.map((t) => (
-                <div key={t.id} className="space-y-3">
-                  <div className="flex items-center space-x-2 border-b border-slate-200 pb-2">
-                    <span className="text-xs font-bold text-sky-800 bg-sky-100 px-2.5 py-0.5 rounded-full">
-                      {t.category}
-                    </span>
-                    <h3 className="font-bold text-slate-900 text-sm sm:text-base">
-                      {t.title}
-                    </h3>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {t.keyCruxes.map((crux, idx) => (
-                      <CruxCard key={idx} crux={crux} index={idx} />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Chat Interface */}
+        <ChatView
+          topic={currentTopic}
+          messages={currentMessages}
+          loading={loading}
+          onSendMessage={handleSendMessage}
+          onClearHistory={handleClearHistory}
+        />
       </main>
     </div>
   );
