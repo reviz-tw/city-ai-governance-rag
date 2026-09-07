@@ -15,19 +15,14 @@ export const Header: FC<HeaderProps> = ({ documentCount }) => {
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-sky-500/20">
               <Sparkles className="w-5 h-5" />
             </div>
-            <div>
-              <div className="flex items-center space-x-2">
+              <div>
                 <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
                   台北市 AI 治理政策顧問系統
                 </h1>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-sky-100 text-sky-800 border border-sky-200">
-                  AI Advisor
-                </span>
+                <p className="text-xs text-slate-500 hidden sm:block">
+                  基於 Vertex AI Search 政策檢索與首長/專家訪談逐字稿分析
+                </p>
               </div>
-              <p className="text-xs text-slate-500 hidden sm:block">
-                基於 Vertex AI Search 政策檢索與首長/專家訪談逐字稿分析
-              </p>
-            </div>
           </div>
 
           {/* Right Status Indicator */}
