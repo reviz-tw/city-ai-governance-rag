@@ -6,7 +6,11 @@ REGION="${GCP_REGION:-asia-east1}"
 INSTANCE_NAME="city-rag-sql-dev"
 DB_NAME="city_governance"
 DB_USER="rag_user"
-DB_PASSWORD="${DB_PASSWORD:-CHANGE_ME}"
+if [ -z "${DB_PASSWORD:-}" ]; then
+  echo "錯誤: 請先設定 DB_PASSWORD 環境變數！"
+  echo "範例: DB_PASSWORD='your-strong-password' ./infra/create_cloud_sql.sh"
+  exit 1
+fi
 TIER="db-f1-micro"
 
 echo "=== 1. 確認專案設定 ==="
