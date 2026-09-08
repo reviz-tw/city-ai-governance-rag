@@ -1,40 +1,95 @@
-import { FC } from 'react';
-import { Sparkles, ShieldCheck } from 'lucide-react';
+import { FC, ChangeEvent } from 'react';
+import { BookOpen, Check, Globe } from 'lucide-react';
+import { LanguageCode } from '../types';
+import { UIStrings } from '../i18n';
 
 interface HeaderProps {
-  documentCount: number;
+  t: UIStrings;
+  lang: LanguageCode;
+  onLangChange: (newLang: LanguageCode) => void;
+  documentCount?: number;
 }
 
-export const Header: FC<HeaderProps> = ({ documentCount }) => {
-  return (
-    <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo & Title */}
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-sky-500/20">
-              <Sparkles className="w-5 h-5" />
-            </div>
-              <div>
-                <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
-                  台北市 AI 治理政策顧問系統
-                </h1>
-                <p className="text-xs text-slate-500 hidden sm:block">
-                  基於 Vertex AI Search 政策檢索與首長/專家訪談逐字稿分析
-                </p>
-              </div>
-          </div>
+export const Header: FC<HeaderProps> = ({ t, lang, onLangChange, documentCount }) => {
+  const handleSelectChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    onLangChange(e.target.value as LanguageCode);
+  };
 
-          {/* Right Status Indicator */}
-          <div className="flex items-center space-x-2.5 text-xs">
-            <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 font-medium">
-              📚 已載入 {documentCount} 份政策與訪談文獻
-            </span>
-            <div className="flex items-center space-x-1.5 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full border border-emerald-200 font-medium">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>線上即時問答</span>
-            </div>
-          </div>
+  // Format doc count if dynamic count available
+  const docText = documentCount && documentCount !== 22
+    ? t.docCount.replace(/\d+/, documentCount.toString())
+    : t.docCount;
+
+  return (
+    <header
+      className="flex-none flex items-center gap-3 px-5 border-b border-[var(--color-neutral-200)] bg-[var(--color-bg)] sticky top-0 z-30"
+      style={{ height: '68px' }}
+    >
+      {/* TFD & AI Governance Logo Emblem */}
+      <div className="flex-none flex items-center justify-center">
+        <div
+          className="w-[38px] h-[38px] rounded-[10px] bg-gradient-to-br from-[#c67139] to-[#8c491a] shadow-sm flex items-center justify-center text-white relative overflow-hidden"
+          title="台灣民主基金會 • AI 治理政策顧問"
+        >
+          {/* Stylized Emblem SVG */}
+          <svg className="w-5 h-5 text-amber-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5z" />
+            <path d="M2 17l10 5 10-5" />
+            <path d="M2 12l10 5 10-5" />
+          </svg>
+          <div className="absolute inset-0 bg-white/10 pointer-events-none" />
+        </div>
+      </div>
+
+      {/* Brand & Subtitle */}
+      <div className="flex flex-col gap-0.5 select-none">
+        <span className="font-heading text-[17px] text-[var(--color-text)] leading-tight">
+          {t.brand}
+        </span>
+        <span className="font-body font-normal text-[12px] text-[var(--color-neutral-600)] leading-tight">
+          {t.brandSub}
+        </span>
+      </div>
+
+      {/* Right Controls */}
+      <div className="ml-auto flex items-center gap-3">
+        {/* Document Count Tag */}
+        <div className="tag tag-accent-2 hidden sm:inline-flex gap-1.5 py-1 px-3">
+          <BookOpen className="w-3.5 h-3.5 flex-none" />
+          <span>{docText}</span>
+        </div>
+
+        {/* Live Q&A Tag */}
+        <div className="tag tag-accent inline-flex gap-1.5 py-1 px-3">
+          <Check className="w-3.5 h-3.5 flex-none stroke-[2.75]" />
+          <span>{t.liveTag}</span>
+        </div>
+
+        {/* Language Selector */}
+        <div className="flex-none flex items-center gap-1.5 ml-1">
+          <Globe className="w-4 h-4 text-[var(--color-neutral-600)] flex-none" />
+          <select
+            className="input text-xs cursor-pointer"
+            value={lang}
+            onChange={handleSelectChange}
+            style={{
+              width: 'auto',
+              minHeight: '34px',
+              padding: '4px 28px 4px 12px',
+              backgroundColor: 'var(--color-surface)',
+              borderColor: 'var(--color-divider)',
+              color: 'var(--color-text)'
+            }}
+            aria-label="選擇介面語言"
+          >
+            <option value="zh">中文 (Chinese)</option>
+            <option value="en">English</option>
+            <option value="ja">日本語 (Japanese)</option>
+            <option value="fr">Français (French)</option>
+            <option value="es">Español (Spanish)</option>
+            <option value="ru">Русский (Russian)</option>
+            <option value="ar">العربية (Arabic)</option>
+          </select>
         </div>
       </div>
     </header>

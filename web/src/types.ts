@@ -5,6 +5,8 @@ export interface Crux {
   conPoints: string[];
 }
 
+export type LanguageCode = 'zh' | 'en' | 'ja' | 'fr' | 'es' | 'ru' | 'ar';
+
 export interface Topic {
   id: string;
   category: string;
@@ -14,6 +16,11 @@ export interface Topic {
   documentsCount: number;
   sampleQuestions: string[];
   keyCruxes: Crux[];
+  icon?: 'phone' | 'shield' | 'users' | 'leaf';
+  bg?: string;
+  border?: string;
+  iconBg?: string;
+  iconFg?: string;
 }
 
 export interface Citation {
