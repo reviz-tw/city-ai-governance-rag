@@ -62,7 +62,7 @@ export const TopicDrawer: FC<TopicDrawerProps> = ({
         <div
           onClick={onClose}
           className="absolute inset-0 left-[84px] bg-[#201e1d]/30 backdrop-blur-[1px] z-15 transition-opacity"
-          aria-label="關閉側欄抽屜"
+          aria-label={t.drawerCloseLabel}
         />
       )}
 
@@ -98,7 +98,7 @@ export const TopicDrawer: FC<TopicDrawerProps> = ({
             type="button"
             onClick={onClose}
             className="btn btn-icon btn-ghost text-[var(--color-neutral-700)] hover:text-[var(--color-text)]"
-            aria-label="關閉抽屜"
+            aria-label={t.drawerCloseLabel}
           >
             <X className="w-5 h-5" />
           </button>
@@ -174,7 +174,7 @@ export const TopicDrawer: FC<TopicDrawerProps> = ({
 
                     {/* Document count */}
                     <div className="text-[11.5px] font-semibold text-[var(--color-accent-700)] pt-1 border-t border-[var(--color-divider)]">
-                      📚 {tp.documentsCount} 份相關文獻
+                      {t.docsCountFormatted(tp.documentsCount)}
                     </div>
                   </button>
                 );
@@ -190,13 +190,13 @@ export const TopicDrawer: FC<TopicDrawerProps> = ({
                   {t.analysisHint}
                 </p>
                 <div className="mt-1 text-xs font-bold text-[var(--color-accent-700)]">
-                  當前專題：{selectedTopic.title}
+                  {t.currentTopicLabel}{selectedTopic.title}
                 </div>
               </div>
 
               {cruxes.length === 0 ? (
                 <div className="card p-6 text-center text-xs text-[var(--color-neutral-600)]">
-                  該專題目前尚無結構化爭點分析。
+                  {t.noCruxText}
                 </div>
               ) : (
                 cruxes.map((crux: Crux, idx: number) => {

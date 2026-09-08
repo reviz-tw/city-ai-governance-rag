@@ -176,7 +176,7 @@ export const ChatView: FC<ChatViewProps> = ({
               type="button"
               onClick={onClearHistory}
               className="btn btn-ghost text-xs px-2.5 py-1 text-[var(--color-neutral-600)] hover:text-red-700"
-              title="清除當前對話紀錄"
+              title={t.clearHistoryTitle}
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">{t.restartBtn}</span>
@@ -272,7 +272,7 @@ export const ChatView: FC<ChatViewProps> = ({
                       <div className="mt-4 pt-3 border-t border-[var(--color-divider)]">
                         <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--color-neutral-700)] mb-2">
                           <BookOpen className="w-3.5 h-3.5 text-[var(--color-accent-600)]" />
-                          <span>{t.sourcesHeader} ({msg.citations.length} 篇):</span>
+                          <span>{t.sourcesHeader} ({msg.citations.length}):</span>
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {msg.citations.map((c) => (
@@ -346,7 +346,7 @@ export const ChatView: FC<ChatViewProps> = ({
           <div className="flex items-start justify-between mb-2">
             <div className="flex items-center gap-2">
               <span className="tag tag-accent text-xs font-bold">
-                [{selectedCitation.citation_id}] 引用來源
+                [{selectedCitation.citation_id}] {t.sourceCitationBadge}
               </span>
               <h4 className="font-heading font-bold text-[var(--color-text)] text-sm m-0">
                 {selectedCitation.title}
@@ -356,18 +356,18 @@ export const ChatView: FC<ChatViewProps> = ({
               type="button"
               onClick={() => setSelectedCitation(null)}
               className="btn btn-icon btn-ghost text-[var(--color-neutral-600)]"
-              aria-label="關閉來源"
+              aria-label={t.drawerCloseLabel}
             >
               <X className="w-4 h-4" />
             </button>
           </div>
           <div className="bg-[var(--color-surface)] rounded-[var(--radius-md)] p-3 border border-[var(--color-divider)] text-xs text-[var(--color-text)] leading-relaxed font-mono whitespace-pre-wrap">
-            {selectedCitation.snippet || '（該篇政策文獻已作為整體 Grounding 依據）'}
+            {selectedCitation.snippet || selectedCitation.title}
           </div>
           {selectedCitation.link && (
             <div className="mt-2 flex justify-end">
               <span className="text-[11px] text-[var(--color-neutral-500)] truncate">
-                來源路徑: {selectedCitation.link}
+                {selectedCitation.link}
               </span>
             </div>
           )}
@@ -402,7 +402,7 @@ export const ChatView: FC<ChatViewProps> = ({
             type="submit"
             disabled={!inputText.trim() || loading}
             className="btn btn-primary btn-icon flex-none shadow-sm"
-            aria-label="發送問題"
+            aria-label={t.sendAriaLabel}
           >
             <Send className="icn" />
           </button>

@@ -3,7 +3,7 @@ import { Header } from './components/Header';
 import { TopicDrawer } from './components/TopicDrawer';
 import { ChatView } from './components/ChatView';
 import { Topic, ChatMessage, GovernanceDocument, Citation, LanguageCode } from './types';
-import { STRINGS, INITIAL_TOPICS } from './i18n';
+import { STRINGS, INITIAL_TOPICS, getLocalizedTopic } from './i18n';
 import { Layers, FlaskConical } from 'lucide-react';
 
 export default function App() {
@@ -51,7 +51,9 @@ export default function App() {
       .catch((err) => console.log('Failed to fetch doc list:', err));
   }, []);
 
-  const currentTopic = topics.find((tp) => tp.id === selectedTopicId) || topics[0];
+  const rawTopic = topics.find((tp) => tp.id === selectedTopicId) || topics[0];
+  const currentTopic = getLocalizedTopic(rawTopic, lang);
+  const localizedTopics = topics.map((tp) => getLocalizedTopic(tp, lang));
   const currentMessages = messagesByTopic[selectedTopicId] || [];
 
   const handleSelectTopic = (id: string) => {
@@ -251,7 +253,7 @@ export default function App() {
         {/* Slide-out Drawer */}
         <TopicDrawer
           t={t}
-          topics={topics}
+          topics={localizedTopics}
           selectedTopicId={selectedTopicId}
           onSelectTopic={handleSelectTopic}
           isOpen={drawerOpen}
