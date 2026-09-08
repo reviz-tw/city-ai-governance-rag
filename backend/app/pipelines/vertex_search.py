@@ -257,6 +257,18 @@ def search_gcs_documents_fallback(query: str, top_k: int = 4) -> List[Dict[str, 
     return results
 
 
+LANG_NAMES: Dict[str, str] = {
+    "zh": "繁體中文 (Traditional Chinese)",
+    "zh-TW": "繁體中文 (Traditional Chinese)",
+    "en": "English",
+    "ja": "日本語 (Japanese)",
+    "fr": "Français (French)",
+    "es": "Español (Spanish)",
+    "ru": "Русский (Russian)",
+    "ar": "العربية (Arabic)",
+}
+
+
 def query_city_governance_rag_vertex(
     query: str,
     city_filter: Optional[str] = None,
@@ -266,14 +278,15 @@ def query_city_governance_rag_vertex(
     filter_parts = []
     if city_filter:
         filter_parts.append(f'city = ANY("{city_filter}")')
-    if language_filter:
+    # Only filter by document language if Chinese is requested
+    if language_filter and language_filter in ["zh", "zh-TW"]:
         filter_parts.append(f'language = ANY("{language_filter}")')
         
     filter_expr = " AND ".join(filter_parts) if filter_parts else None
     
     search_results = search_vertex_data_store(query=query, page_size=5, filter_expr=filter_expr)
     if not search_results:
-        logger.info("Vertex AI Search returned empty (indexing in progress), using direct GCS document reader fallback...")
+        logger.info("Vertex AI Search returned empty, using direct GCS document reader fallback...")
         search_results = search_gcs_documents_fallback(query=query, top_k=4)
     
     # Build context from Vertex Search results
@@ -285,43 +298,70 @@ def query_city_governance_rag_vertex(
         sources.append({
             "citation_id": idx,
             "title": res["title"],
-            "link": res.get("link", "")
+            "link": res.get("link", ""),
+            "snippet": snippets_text[:300] if snippets_text else ""
         })
         
     context_str = "\n\n".join(context_blocks)
+    target_lang = LANG_NAMES.get(language_filter or "zh", "繁體中文 (Traditional Chinese)")
     
-    prompt = f"""你是一位專精「全球城市 AI 治理 (Global City AI Governance)」的高級研究顧問。
-請根據以下檢索自全球城市政策資料庫的真實資料，專業、嚴謹且客觀地回答使用者問題。
+    prompt = f"""你是一位專精「全球城市 AI 治理 (Global City AI Governance)」與「台北市智慧城市與 AI 政策」的高級研究顧問。
+請根據以下檢索自城市政策資料庫與局處首長/專家訪談逐字稿的真實資料，專業、嚴謹且客觀地回答使用者問題。
 
 【檢索資料庫內容】:
-{context_str if context_str else "（目前尚未檢索到相關特定文件，請基於通用的全球城市 AI 治理框架進行分析並說明）"}
+{context_str if context_str else "（目前尚未檢索到相關特定文件，請基於台北市政府 AI 作業指引與智慧城市治理架構進行客觀分析）"}
 
 【使用者問題】:
 {query}
 
-【回答要求】:
-1. 若有引用上述文件，請在句子後方標註引用編號（例如 [1]、[2]）。
-2. 提供清晰的結構（政策背景、關鍵規範、城市實踐對比、建議或結論）。
-3. 支持繁體中文或使用者提問的語言輸出。
+【回答格式要求】:
+1. 若有引用檢索資料中的具體觀點、數據或局處訪談，請在句子後方精確標註引用編號（例如 [1]、[2]）。
+2. 提供條理清晰的結構（例如：政策背景 / 核心發現 / 局處實務考量 / 政策建議或結論）。
+3. 語氣專業、客觀中立、言之有據。
+4. 請務必全程使用【{target_lang}】進行回答與輸出。
 """
 
-    try:
-        if settings.GEMINI_API_KEY:
+    answer_text = ""
+    # 1. Try Vertex AI Generative Model
+    for loc in [settings.GCP_REGION, "us-central1", "asia-east1"]:
+        try:
+            vertexai.init(project=settings.GCP_PROJECT_ID, location=loc)
+            for m_name in [settings.GEMINI_MODEL, "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]:
+                try:
+                    model = GenerativeModel(m_name)
+                    resp = model.generate_content(prompt)
+                    if resp and resp.text:
+                        answer_text = resp.text
+                        break
+                except Exception:
+                    continue
+            if answer_text:
+                break
+        except Exception:
+            continue
+
+    # 2. Try Google GenAI if API key available
+    if not answer_text and settings.GEMINI_API_KEY:
+        try:
             import google.generativeai as genai
             genai.configure(api_key=settings.GEMINI_API_KEY)
-            model = genai.GenerativeModel("gemini-3.6-flash")
-            response = model.generate_content(prompt)
-            answer_text = response.text
-        else:
-            model = GenerativeModel("gemini-1.5-flash")
-            response = model.generate_content(prompt)
-            answer_text = response.text
-    except Exception as e:
-        logger.warning(f"LLM generation fallback: {e}")
+            for m_name in ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]:
+                try:
+                    model = genai.GenerativeModel(m_name)
+                    resp = model.generate_content(prompt)
+                    if resp and resp.text:
+                        answer_text = resp.text
+                        break
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    if not answer_text:
         if context_blocks:
-            answer_text = f"【Vertex AI 政策檢索結果】\n成功檢索到 {len(search_results)} 份相關政策片段：\n\n" + "\n\n".join(context_blocks)
+            answer_text = f"【政策檢索結果】\n成功檢索到 {len(search_results)} 份相關政策片段：\n\n" + "\n\n".join(context_blocks)
         else:
-            answer_text = f"已收到查詢：「{query}」。目前知識庫中已上傳 22 份台北市政策文件（包含《臺北市政府使用人工智慧作業指引》、1999 客服研究及局處首長訪談）。Vertex AI 正在進行索引建構，您亦可直接在 Open WebUI 中調用 MCP 工具進行問答！"
+            answer_text = f"已收到查詢：「{query}」。目前知識庫中已上傳 22 份台北市政策文件。"
 
     return {
         "query": query,
@@ -342,7 +382,8 @@ def stream_city_governance_rag_vertex(
     filter_parts = []
     if city_filter:
         filter_parts.append(f'city = ANY("{city_filter}")')
-    if language_filter:
+    # Only filter by document language if Chinese is requested; for other languages, search full corpus and let LLM translate
+    if language_filter and language_filter in ["zh", "zh-TW"]:
         filter_parts.append(f'language = ANY("{language_filter}")')
         
     filter_expr = " AND ".join(filter_parts) if filter_parts else None
@@ -368,6 +409,8 @@ def stream_city_governance_rag_vertex(
     yield f"data: {json.dumps({'type': 'sources', 'sources': sources}, ensure_ascii=False)}\n\n"
     
     context_str = "\n\n".join(context_blocks)
+    target_lang = LANG_NAMES.get(language_filter or "zh", "繁體中文 (Traditional Chinese)")
+    
     prompt = f"""你是一位專精「全球城市 AI 治理 (Global City AI Governance)」與「台北市智慧城市與 AI 政策」的高級研究顧問。
 請根據以下檢索自城市政策資料庫與局處首長/專家訪談逐字稿的真實資料，專業、嚴謹且客觀地回答使用者問題。
 
@@ -381,40 +424,87 @@ def stream_city_governance_rag_vertex(
 1. 若有引用檢索資料中的具體觀點、數據或局處訪談，請在句子後方精確標註引用編號（例如 [1]、[2]）。
 2. 提供條理清晰的結構（例如：政策背景 / 核心發現 / 局處實務考量 / 政策建議或結論）。
 3. 語氣專業、客觀中立、言之有據。
-4. 使用繁體中文輸出。
+4. 請務必全程使用【{target_lang}】進行回答與輸出。
 """
 
-    try:
-        if settings.GEMINI_API_KEY:
+    has_output = False
+
+    # Tier 1: Try Vertex AI SDK (Natively supported via Cloud Run IAM)
+    for loc in [settings.GCP_REGION, "us-central1", "asia-east1"]:
+        try:
+            vertexai.init(project=settings.GCP_PROJECT_ID, location=loc)
+            for m_name in [settings.GEMINI_MODEL, "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]:
+                try:
+                    model = GenerativeModel(m_name)
+                    response = model.generate_content(prompt, stream=True)
+                    for chunk in response:
+                        chunk_text = ""
+                        try:
+                            if hasattr(chunk, "text") and chunk.text:
+                                chunk_text = chunk.text
+                        except Exception:
+                            pass
+                        if not chunk_text:
+                            try:
+                                if hasattr(chunk, "candidates") and chunk.candidates:
+                                    parts = chunk.candidates[0].content.parts
+                                    chunk_text = "".join([getattr(p, "text", "") for p in parts if getattr(p, "text", "")])
+                            except Exception:
+                                pass
+                        if chunk_text:
+                            has_output = True
+                            yield f"data: {json.dumps({'type': 'chunk', 'text': chunk_text}, ensure_ascii=False)}\n\n"
+                    if has_output:
+                        break
+                except Exception as vm_err:
+                    logger.warning(f"Vertex AI model {m_name} in {loc} failed: {vm_err}")
+                    continue
+            if has_output:
+                break
+        except Exception as v_init_err:
+            logger.warning(f"Vertex AI init in {loc} failed: {v_init_err}")
+            continue
+
+    # Tier 2: Try Google GenAI SDK if API key available
+    if not has_output and settings.GEMINI_API_KEY:
+        try:
             import google.generativeai as genai
             genai.configure(api_key=settings.GEMINI_API_KEY)
-            for m_name in [settings.GEMINI_MODEL, "gemini-3.6-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash"]:
+            for m_name in ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]:
                 try:
                     model = genai.GenerativeModel(m_name)
                     response = model.generate_content(prompt, stream=True)
-                    has_output = False
                     for chunk in response:
-                        if chunk.text:
+                        chunk_text = ""
+                        try:
+                            if hasattr(chunk, "text") and chunk.text:
+                                chunk_text = chunk.text
+                        except Exception:
+                            pass
+                        if chunk_text:
                             has_output = True
-                            yield f"data: {json.dumps({'type': 'chunk', 'text': chunk.text}, ensure_ascii=False)}\n\n"
+                            yield f"data: {json.dumps({'type': 'chunk', 'text': chunk_text}, ensure_ascii=False)}\n\n"
                     if has_output:
                         break
-                except Exception as m_err:
-                    logger.warning(f"Google GenAI error with model {m_name}: {m_err}")
+                except Exception as gm_err:
+                    logger.warning(f"Google GenAI model {m_name} failed: {gm_err}")
                     continue
+        except Exception as g_err:
+            logger.warning(f"Google GenAI fallback failed: {g_err}")
+
+    # Tier 3: If LLM is completely unreachable, synthesize from context
+    if not has_output:
+        logger.error("All LLM streaming tiers failed, outputting grounded summary fallback.")
+        if target_lang.startswith("Español"):
+            fallback_msg = f"### Síntesis de gobernanza de IA y análisis documental\n\nNo fue posible conectar con el modelo generativo en este momento, pero se han recuperado con éxito **{len(search_results)} documentos oficiales** relevantes:\n\n"
+            for idx, res in enumerate(search_results, start=1):
+                snippet = " ".join([s.get("snippet", "") for s in res.get("snippets", []) if isinstance(s, dict)])
+                fallback_msg += f"- **[{idx}] {res['title']}**\n  {snippet[:200]}...\n\n"
         else:
-            try:
-                vertexai.init(project=settings.GCP_PROJECT_ID, location="us-central1")
-                model = GenerativeModel("gemini-1.5-flash")
-                response = model.generate_content(prompt, stream=True)
-                for chunk in response:
-                    if chunk.text:
-                        yield f"data: {json.dumps({'type': 'chunk', 'text': chunk.text}, ensure_ascii=False)}\n\n"
-            except Exception as v_err:
-                logger.warning(f"Vertex AI fallback: {v_err}")
-    except Exception as e:
-        logger.error(f"Stream LLM error: {e}")
-        fallback_msg = f"\n\n（檢索完成，共檢索到 {len(search_results)} 份相關政策文獻。如需更多資訊，可點擊上方或右側引用出處查閱原文片段。）"
+            fallback_msg = f"### 政策檢索與文獻摘要\n\n目前已成功為您檢索並整合 **{len(search_results)} 份相關政策文獻**：\n\n"
+            for idx, res in enumerate(search_results, start=1):
+                snippet = " ".join([s.get("snippet", "") for s in res.get("snippets", []) if isinstance(s, dict)])
+                fallback_msg += f"- **[{idx}] {res['title']}**\n  {snippet[:200]}...\n\n"
         yield f"data: {json.dumps({'type': 'chunk', 'text': fallback_msg}, ensure_ascii=False)}\n\n"
 
     yield f"data: {json.dumps({'type': 'done'})}\n\n"
