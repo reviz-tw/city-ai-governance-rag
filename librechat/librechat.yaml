@@ -26,5 +26,5 @@ endpoints:
 mcpServers:
   cityGovernanceRag:
     type: sse
-    url: "https://city-rag-backend-dev-wvswpuk2tq-de.a.run.app/mcp/sse"
-    description: "全球城市 AI 治理多語政策法規與案例知識庫 (Haystack + Pgvector)"
+    url: "https://city-rag-backend-dev-59297909591.asia-east1.run.app/mcp/sse"
+    description: "全球城市 AI 治理多語政策法規與案例知識庫 (Vertex AI Search & Gemini)"

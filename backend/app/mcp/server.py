@@ -2,13 +2,31 @@ import json
 import logging
 from typing import Any, List, Optional
 from mcp.server.fastmcp import FastMCP
+try:
+    from mcp.server.transport_security import TransportSecuritySettings
+except ImportError:
+    TransportSecuritySettings = None
+
 from app.pipelines.vertex_search import search_vertex_data_store, query_city_governance_rag_vertex
 from app.pipelines.cleaner import clean_and_annotate_document, preview_chunks
 
 logger = logging.getLogger(__name__)
 
 # Initialize FastMCP Server backed by Vertex AI Search
-mcp = FastMCP("City-AI-Governance-Vertex-MCP", dependencies=["google-cloud-discoveryengine", "google-generativeai"])
+# Configure TransportSecuritySettings to disable DNS rebinding protection for Cloud Run domains
+fastmcp_kwargs = {
+    "dependencies": ["google-cloud-discoveryengine", "google-generativeai"]
+}
+if TransportSecuritySettings is not None:
+    try:
+        fastmcp_kwargs["transport_security"] = TransportSecuritySettings(
+            enable_dns_rebinding_protection=False,
+            allowed_hosts=["*"]
+        )
+    except Exception as e:
+        logger.warning(f"Failed to initialize TransportSecuritySettings: {e}")
+
+mcp = FastMCP("City-AI-Governance-Vertex-MCP", **fastmcp_kwargs)
 
 @mcp.tool()
 def search_city_ai_governance_knowledge(
