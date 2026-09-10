@@ -78,16 +78,40 @@ class UnifiedMCPApp:
         method = scope.get("method", "GET").upper()
         path = scope.get("path", "")
 
-        # 1. 傳統 SSE GET 端點: GET /mcp/sse (LibreChat 等傳統用戶端)
-        if method == "GET" and (path == "/sse" or path == "/sse/"):
+        # 處理 CORS preflight OPTIONS 請求
+        if method == "OPTIONS":
+            from starlette.responses import Response
+            res = Response(
+                status_code=200,
+                headers={
+                    "access-control-allow-origin": "*",
+                    "access-control-allow-methods": "GET, POST, OPTIONS, DELETE, HEAD",
+                    "access-control-allow-headers": "*",
+                }
+            )
+            await res(scope, receive, send)
+            return
+
+        # 1. 傳統 SSE GET 端點: GET /mcp/sse
+        # 供 LibreChat 等傳統 SSE 用戶端建立串流
+        if method == "GET" and (path.endswith("/sse") or path.endswith("/sse/")):
             if self.sse_asgi:
-                await self.sse_asgi(scope, receive, send)
+                # 確保 scope 中的 path 與 root_path 正確相容於 sse_app (Starlette)
+                child_scope = dict(scope)
+                child_scope["root_path"] = "/mcp"
+                child_scope["path"] = "/sse"
+                await self.sse_asgi(child_scope, receive, send)
                 return
 
         # 2. 傳統 SSE 訊息發送端點: POST /mcp/messages/...
-        if path.startswith("/messages"):
+        # 供 LibreChat 發送 JSON-RPC 訊息到現有 SSE 會話
+        if "/messages" in path:
             if self.sse_asgi:
-                await self.sse_asgi(scope, receive, send)
+                child_scope = dict(scope)
+                child_scope["root_path"] = "/mcp"
+                idx = path.find("/messages")
+                child_scope["path"] = path[idx:]
+                await self.sse_asgi(child_scope, receive, send)
                 return
 
         # 3. 現代 Streamable HTTP (Claude Custom Connector, Cursor 等)
@@ -107,17 +131,37 @@ class UnifiedMCPApp:
                 new_headers.append((k, v))
         if not has_accept:
             new_headers.append((b"accept", b"application/json, text/event-stream"))
-        scope["headers"] = new_headers
+        
+        req_scope = dict(scope)
+        req_scope["headers"] = new_headers
 
         if self.streamable_mgr:
-            await self.streamable_mgr.handle_request(scope, receive, send)
+            await self.streamable_mgr.handle_request(req_scope, receive, send)
         elif self.sse_asgi:
-            await self.sse_asgi(scope, receive, send)
+            await self.sse_asgi(req_scope, receive, send)
         else:
             raise HTTPException(status_code=503, detail="MCP service unavailable")
 
-# 掛載統一 MCP 路由器於 /mcp
+class MCPRoutingMiddleware:
+    """
+    攔截所有 /mcp 與 /mcp/* 請求，確保無結尾斜線的 /mcp 能正確直達 MCP 路由器，
+    避免被 FastAPI 的 SPA 萬用路由捕捉或回傳 405 Method Not Allowed。
+    """
+    def __init__(self, app, mcp_app):
+        self.app = app
+        self.mcp_app = mcp_app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            path = scope.get("path", "")
+            if path == "/mcp" or path.startswith("/mcp/"):
+                await self.mcp_app(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+# 掛載統一 MCP 路由器與中介軟體
 mcp_unified_app = UnifiedMCPApp(sse_app, session_manager)
+app.add_middleware(MCPRoutingMiddleware, mcp_app=mcp_unified_app)
 app.mount("/mcp", mcp_unified_app)
 logger.info("MCP 整合端點已成功掛載於 /mcp (支援 Streamable HTTP 及 SSE)")
 
