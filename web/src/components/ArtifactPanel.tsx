@@ -1,7 +1,11 @@
+import {WorkspacePanel} from './WorkspacePanel';
 import {useEffect, useState} from 'react';
 import {api, jsonRequest} from '../lib/api';
 import {CONTENT_LANGUAGES} from '../lib/languages';
 import {ChatMessage} from '../types';
+
+const kindLabels: Record<string, string> = {chart:'圖表', pdf:'報告 PDF', pptx:'投影片', translation:'翻譯', index:'切片發布'};
+const statusLabels: Record<string, string> = {queued:'等待處理', running:'處理中', render_queued:'等待產出', awaiting_review:'等待確認草稿', completed:'已完成', failed:'未完成', cancelled:'已取消'};
 
 export function JobView({id, onClose}: {id: string; onClose: () => void}) {
   const [job, setJob] = useState<any>(null);
@@ -40,10 +44,9 @@ export function JobView({id, onClose}: {id: string; onClose: () => void}) {
     try {setError(''); setJob(await api(`/api/artifacts/${id}/${action}`, jsonRequest({revision: job.revision, draft}))); setRefreshKey(v=>v+1);}
     catch (err: any) {setError(err.message);}
   };
-  return <section className="workspace-panel" aria-label="產出任務">
-    <div className="flex justify-between"><h2>{job?.kind==='index'?'切片發布':'產出預覽'}</h2><button onClick={onClose}>關閉</button></div>
+  return <WorkspacePanel title={job?.kind==='index'?'切片發布':'產出預覽'} onClose={onClose}>
     {error && <p role="alert">{error}</p>}
-    {job && <><p>狀態：{job.status} · {job.progress}%</p>
+    {job && <><p className="job-status">{statusLabels[job.status] || job.status} · {job.progress}%</p><progress className="job-progress" value={job.progress} max={100} aria-label="任務進度"/>
       {job.kind==='index'&&['queued','running'].includes(job.status)&&<p>索引處理中，預計約 10～30 分鐘，實際依 Vertex 處理狀態而定。完成前維持前一發布版本；可關閉視窗，稍後從「我的產出」查看。</p>}
       {job.kind==='index'&&job.status==='completed'&&<p>已發布 v{job.result?.published_version}，{job.result?.verified_chunks} 個切片已通過搜尋驗證。</p>}
       {job.stale && <p role="alert">來源已更新，這份產出不是最新版本；請重新建立任務。</p>}
@@ -78,7 +81,7 @@ export function JobView({id, onClose}: {id: string; onClose: () => void}) {
       {['failed','cancelled'].includes(job.status) && <button onClick={() => act('retry')}>重試</button>}
       <button onClick={async () => {try {await api(`/api/artifacts/${id}`, {method:'DELETE'}); onClose();} catch (err: any) {setError(err.message);}}}>刪除任務與檔案</button>
     </>}
-  </section>;
+  </WorkspacePanel>;
 }
 
 function BlockText({text,cells}:{text:string;cells?:string[][]}) {
@@ -87,14 +90,21 @@ function BlockText({text,cells}:{text:string;cells?:string[][]}) {
 
 export function TaskHistory({onClose}:{onClose:()=>void}) {
   const [tasks,setTasks]=useState<any[]>([]);
+  const [loading,setLoading]=useState(true);
   const [selected,setSelected]=useState('');
   const [error,setError]=useState('');
-  useEffect(()=>{if(!selected) api('/api/artifacts').then(setTasks).catch(e=>setError(e.message));},[selected]);
+  useEffect(()=>{if(!selected) {setLoading(true); api('/api/artifacts').then(setTasks).catch(e=>setError(e.message)).finally(()=>setLoading(false));}},[selected]);
   if(selected) return <JobView id={selected} key={selected} onClose={()=>setSelected('')}/>;
-  return <section className="workspace-panel"><div className="flex justify-between"><h2>我的產出任務</h2><button onClick={onClose}>關閉</button></div>
-    <p>重新開啟進行中的任務或下載尚未到期的產出。</p>{error&&<p role="alert">{error}</p>}
-    {!tasks.length&&<p>目前沒有任務。</p>}{tasks.map(task=><div className="source-block" key={task.id}><button className="btn" onClick={()=>setSelected(task.id)}>{task.kind} · {task.status} · {task.progress}%</button><p>保存至 {new Date(task.expires_at*1000).toLocaleString()}</p></div>)}
-  </section>;
+  return <WorkspacePanel title="我的產出" onClose={onClose}>
+    <p className="panel-intro">重新開啟進行中的任務或下載尚未到期的產出。檔案保存 24 小時。</p>{error&&<p role="alert">{error}</p>}
+    {loading && <p role="status">正在載入產出……</p>}
+    {!loading && !tasks.length && !error && <p className="empty-panel">目前沒有任務。</p>}
+    <div className="task-list">{tasks.map(task=><button className={`task-card status-${task.status}`} key={task.id} onClick={()=>setSelected(task.id)}>
+      <span className="task-card-title"><span className="task-dot"/>{kindLabels[task.kind] || task.kind} · {statusLabels[task.status] || task.status}<span>{task.progress}%</span></span>
+      <span className="task-expiry">保存至 {new Date(task.expires_at*1000).toLocaleString()}</span>
+      {['queued','running','render_queued'].includes(task.status) && <progress className="job-progress" value={task.progress} max={100} aria-label="任務進度"/>}
+    </button>)}</div>
+  </WorkspacePanel>;
 }
 
 export function ArtifactPanel({kind, messages, selectedMessage, onClose}: {kind: string; messages: ChatMessage[]; selectedMessage?: string; onClose: () => void}) {
@@ -113,14 +123,14 @@ export function ArtifactPanel({kind, messages, selectedMessage, onClose}: {kind:
   const candidates = [...new Set(selected.flatMap(m => m.citations?.map(c => c.document_id).filter(Boolean) || []))];
   const sources=(sourceSelection || candidates.slice(0,12)).filter(id=>candidates.includes(id));
   if (job) return <JobView id={job} onClose={onClose}/>;
-  return <section className="workspace-panel">
-    <div className="flex justify-between"><h2>{kind === 'chart' ? '製作圖表' : kind === 'pdf' ? '製作報告 PDF' : '產出投影片'}</h2><button onClick={onClose}>關閉</button></div>
-    <label>內容範圍<select value={scope} onChange={e => setScope(e.target.value)}><option value="answer">這則回答</option><option value="conversation">這段對話（最近 12 則回答）</option></select></label>
+  return <WorkspacePanel title={kind === 'chart' ? '製作圖表' : kind === 'pdf' ? '製作報告 PDF' : '產出投影片'} onClose={onClose}>
+    <p className="panel-intro">先產生草稿給你檢查，確認後才產出檔案。檔案保存 24 小時。</p>
+    <div className="artifact-fields"><label>內容範圍<select value={scope} onChange={e => setScope(e.target.value)}><option value="answer">這則回答</option><option value="conversation">這段對話（最近 12 則回答）</option></select></label>
     {scope === 'answer' && <select value={messageId} onChange={e => setMessageId(e.target.value)}>{answers.map(m => <option value={m.id} key={m.id}>{m.content.slice(0,80)}</option>)}</select>}
     <label>產出語言<select value={language} onChange={e => setLanguage(e.target.value)}>{Object.entries(CONTENT_LANGUAGES).map(([code,name]) => <option key={code} value={code}>{name}</option>)}</select></label>
     <label>受眾<input value={audience} onChange={e => setAudience(e.target.value)}/></label>
     {kind === 'pptx' && <label>目標頁數<input type="number" min={3} max={12} value={pages} onChange={e => setPages(Number(e.target.value))}/></label>}
-    <details><summary>選擇原始來源（最多 12 份）</summary>{candidates.map(id=><label key={id}><input type="checkbox" checked={sources.includes(id)} disabled={!sources.includes(id)&&sources.length>=12} onChange={e=>setSourceSelection(e.target.checked?[...sources,id]:sources.filter(v=>v!==id))}/>{selected.flatMap(m=>m.citations||[]).find(c=>c.document_id===id)?.title || id}</label>)}</details>
+    </div><details><summary>選擇原始來源（最多 12 份）</summary>{candidates.map(id=><label key={id}><input type="checkbox" checked={sources.includes(id)} disabled={!sources.includes(id)&&sources.length>=12} onChange={e=>setSourceSelection(e.target.checked?[...sources,id]:sources.filter(v=>v!==id))}/>{selected.flatMap(m=>m.citations||[]).find(c=>c.document_id===id)?.title || id}</label>)}</details>
     <p>選定 {selected.length} 則回答與 {sources.length} 份原始來源。先產生草稿供檢查，檔案保存 24 小時。</p>
     {error && <p role="alert">{error}</p>}
     <button className="btn btn-primary" disabled={busy || !sources.length} onClick={async () => {
@@ -128,5 +138,5 @@ export function ArtifactPanel({kind, messages, selectedMessage, onClose}: {kind:
       try {const task = await api('/api/artifacts', jsonRequest({kind, scope, message_ids:selected.map(m=>m.id), source_ids:sources, context:selected.map(m=>m.content).join('\n').slice(0,6000), language, audience, pages})); setJob(task.id);}
       catch (err: any) {setError(err.message);} finally {setBusy(false);}
     }}>建立草稿</button>
-  </section>;
+  </WorkspacePanel>;
 }

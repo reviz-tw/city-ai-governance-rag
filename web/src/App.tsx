@@ -8,10 +8,12 @@ import {Library} from './components/Library';
 import {MCPAccess} from './components/MCPAccess';
 import {ChatMessage} from './types';
 import {STRINGS} from './i18n';
-import {normalizeInterfaceLanguage, CONTENT_LANGUAGES} from './lib/languages';
+import {normalizeInterfaceLanguage} from './lib/languages';
 import {api} from './lib/api';
 import {readSSE} from './lib/sse';
-import {workspaceLabels} from './lib/workspace-labels';
+import {ResearchSidebar} from './components/ResearchSidebar';
+import {WorkspacePanel} from './components/WorkspacePanel';
+import {researchCopy} from './lib/research-copy';
 
 export default function App() {
   const [lang, setLang] = useState(() => normalizeInterfaceLanguage(new URLSearchParams(location.search).get('lang') || localStorage.getItem('interface_language')));
@@ -27,7 +29,8 @@ export default function App() {
   const [panel, setPanel] = useState(new URLSearchParams(location.search).has('admin') ? 'library' : '');
   const [sourceId, setSourceId] = useState('');
   const t = STRINGS[lang];
-  const labels=workspaceLabels(lang);
+  const [scopeOpen, setScopeOpen] = useState(false);
+  const [authError, setAuthError] = useState('');
   useEffect(() => {api('/api/auth/me').then(setUser).catch(() => {}).finally(() => setChecking(false));}, []);
   useEffect(() => {localStorage.setItem('interface_language', lang); document.documentElement.lang = lang === 'zh' ? 'zh-TW' : lang; document.documentElement.dir = 'ltr';}, [lang]);
   const clear = () => {setMessages([]); setContextBoundary(0); setSummary(''); setContextCity(null); setCity(''); setSources([]);};
@@ -53,25 +56,23 @@ export default function App() {
     } catch (e: any) {update({content:content || e.message, error:e.message});}
     finally {update({isStreaming:false}); setLoading(false);}
   };
-  if (checking) return <p className="p-8">Loading…</p>;
+  const canCreate = messages.some(m => m.role === 'assistant' && !m.isStreaming && !m.error && m.citations?.some(c => c.document_id));
+  const sidebar = <ResearchSidebar lang={lang} city={city} sources={sources} loading={loading} canCreate={canCreate} panel={panel}
+    onCity={value => {setCity(value); setContextCity(null); setSummary(''); setContextBoundary(messages.length);}}
+    onSources={setSources} onPanel={value => {setScopeOpen(false); setPanel(value);}}/>;
+  if (checking) return <div className="app-loading" role="status"><span className="brand-dot"/>Loading…</div>;
   if (!user) return <Login onLogin={setUser}/>;
-  return <div className="flex flex-col h-screen min-h-[640px] bg-[var(--color-bg)] text-[var(--color-text)] font-body overflow-hidden">
-    <Header t={t} lang={lang} onLangChange={setLang}/>
-    <div className="research-toolbar">
-      <label>{labels.city}<input value={city} disabled={loading} onChange={e => {setCity(e.target.value); setContextCity(null); setSummary(''); setContextBoundary(messages.length);}} placeholder={labels.allCities}/></label>
-      <label>{labels.sources}<select multiple value={sources} onChange={e => setSources(Array.from(e.target.selectedOptions, o=>o.value))}>{Object.entries(CONTENT_LANGUAGES).map(([code,name])=><option key={code} value={code}>{name}</option>)}</select></label>
-      <button className="btn" onClick={() => setSources([])}>{labels.allSources}</button>
-      <button className="btn" disabled={!messages.some(m=>!m.isStreaming&&!m.error&&m.citations?.some(c=>c.document_id))} onClick={()=>setPanel('chart')}>{labels.chart}</button>
-      <button className="btn" disabled={!messages.some(m=>!m.isStreaming&&!m.error&&m.citations?.some(c=>c.document_id))} onClick={()=>setPanel('pdf')}>{labels.report}</button>
-      <button className="btn" disabled={!messages.some(m=>!m.isStreaming&&!m.error&&m.citations?.some(c=>c.document_id))} onClick={()=>setPanel('pptx')}>{labels.slides}</button>
-      <button className="btn" onClick={()=>setPanel('library')}>{labels.library}</button>
-      <button className="btn" onClick={()=>setPanel('tasks')}>{labels.tasks}</button>
-      <button className="btn" onClick={()=>setPanel('mcp')}>MCP</button>
-      <small title={user.email}>{user.email}</small>
-      <button className="btn" onClick={async()=>{await api('/api/auth/logout',{method:'POST'}); clear();setUser(null);}}>{labels.logout}</button>
-    </div>
-    <div className="flex-1 flex min-h-0 relative">
-      <ChatView t={t} messages={messages} loading={loading} onSendMessage={send} onClearHistory={clear} onOpenSource={setSourceId}/>
+  return <div className="app-shell">
+    <Header t={t} lang={lang} onLangChange={setLang} email={user.email} loading={loading} onOpenScope={() => setScopeOpen(true)}
+      onLogout={async () => {
+        try {await api('/api/auth/logout', {method:'POST'}); clear(); setPanel(''); setSourceId(''); setScopeOpen(false); setUser(null);}
+        catch (error: any) {setAuthError(error.message);}
+      }}/>
+    {authError && <p className="app-alert" role="alert">{authError}</p>}
+    <div className="research-workspace">
+      <aside className="research-sidebar" aria-label={researchCopy(lang).scopeToggle}>{sidebar}</aside>
+      <ChatView t={t} lang={lang} messages={messages} loading={loading} onSendMessage={send} onClearHistory={clear} onOpenSource={setSourceId}/>
+      {scopeOpen && <WorkspacePanel title={researchCopy(lang).scopeToggle} className="scope-panel" onClose={() => setScopeOpen(false)}>{sidebar}</WorkspacePanel>}
       {['chart','pdf','pptx'].includes(panel) && <ArtifactPanel kind={panel} messages={messages} onClose={()=>setPanel('')} key={panel}/>}
       {panel === 'library' && <Library editor={user.editor} onClose={()=>setPanel('')} onRead={setSourceId}/>}
       {panel === 'tasks' && <TaskHistory onClose={()=>setPanel('')}/>}

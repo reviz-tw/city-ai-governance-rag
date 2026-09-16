@@ -7,9 +7,9 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        heading: ['Caprasimo', 'system-ui', 'sans-serif'],
-        body: ['Figtree', 'system-ui', 'sans-serif'],
-        sans: ['Figtree', 'system-ui', 'sans-serif'],
+        heading: ['var(--font-heading)'],
+        body: ['var(--font-body)'],
+        sans: ['var(--font-ui)'],
       },
       colors: {
         organic: {

@@ -1,381 +1,134 @@
-import { useState, useRef, useEffect, FC, FormEvent, KeyboardEvent } from 'react';
-import { ChatMessage, Citation } from '../types';
-import { UIStrings } from '../i18n';
-import {
-  Send,
-  Sparkles,
-  Bot,
-  User,
-  Copy,
-  Check,
-  RotateCcw,
-  BookOpen,
-  HelpCircle,
-  X
-} from 'lucide-react';
+import {useState, useRef, useEffect, FormEvent, KeyboardEvent} from 'react';
+import {BookOpen, Check, Copy, RotateCcw} from 'lucide-react';
+import {ChatMessage, Citation} from '../types';
+import {UIStrings} from '../i18n';
+import {CONTENT_LANGUAGES, InterfaceLanguage} from '../lib/languages';
+import {researchCopy} from '../lib/research-copy';
+import {WorkspacePanel} from './WorkspacePanel';
 
 interface ChatViewProps {
-  t: UIStrings;
-  messages: ChatMessage[];
-  loading: boolean;
-  onSendMessage: (text: string) => void;
-  onClearHistory: () => void;
-  onOpenSource: (id: string) => void;
+  t: UIStrings; lang: InterfaceLanguage; messages: ChatMessage[]; loading: boolean;
+  onSendMessage: (text: string) => void; onClearHistory: () => void; onOpenSource: (id: string) => void;
 }
 
-export const ChatView: FC<ChatViewProps> = ({
-  t,
-  messages,
-  loading,
-  onSendMessage,
-  onClearHistory,
-  onOpenSource,
-}) => {
+export function ChatView({t, lang, messages, loading, onSendMessage, onClearHistory, onOpenSource}: ChatViewProps) {
+  const c = researchCopy(lang);
   const [inputText, setInputText] = useState('');
   const [isComposing, setIsComposing] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [copiedId, setCopiedId] = useState('');
+  const [copyError, setCopyError] = useState('');
+  const [sourceMessageId, setSourceMessageId] = useState('');
+  const [selectedCitation, setSelectedCitation] = useState<number | null>(null);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const scrollArea = useRef<HTMLDivElement>(null);
+  const followStream = useRef(true);
+  const input = useRef<HTMLTextAreaElement>(null);
+  const copyTimer = useRef<ReturnType<typeof setTimeout>>();
+  const latestAnswer = [...messages].reverse().find(m => m.role === 'assistant');
+  const sourceMessage = messages.find(m => m.id === sourceMessageId) || latestAnswer;
+  const citations = sourceMessage?.citations || [];
 
-  // Auto-scroll to bottom on new message / streaming update
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    setSourceMessageId(latestAnswer?.id || ''); setSelectedCitation(null); setCopyError('');
+    followStream.current = true;
+  }, [latestAnswer?.id]);
+  useEffect(() => {
+    if (followStream.current && scrollArea.current) scrollArea.current.scrollTop = scrollArea.current.scrollHeight;
   }, [messages, loading]);
+  useEffect(() => {
+    if (input.current) {input.current.style.height = 'auto'; input.current.style.height = `${Math.min(input.current.scrollHeight, 140)}px`;}
+  }, [inputText]);
+  useEffect(() => () => clearTimeout(copyTimer.current), []);
 
-  const handleSubmit = (e?: FormEvent) => {
-    if (e) e.preventDefault();
+  const handleSubmit = (event?: FormEvent) => {
+    event?.preventDefault();
     if (!inputText.trim() || loading || isComposing) return;
-    onSendMessage(inputText.trim());
-    setInputText('');
+    followStream.current = true;
+    onSendMessage(inputText.trim()); setInputText('');
   };
-
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      if (isComposing || (e.nativeEvent && (e.nativeEvent as any).isComposing)) {
-        return;
-      }
-      e.preventDefault();
-      handleSubmit();
+  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Enter' && !event.shiftKey && !isComposing && !event.nativeEvent.isComposing && event.keyCode !== 229) {
+      event.preventDefault(); handleSubmit();
     }
   };
-
-  const handleCopy = (id: string, text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+  const showSources = (message: ChatMessage, citation?: Citation) => {
+    setSourceMessageId(message.id); setSelectedCitation(citation?.citation_id ?? null);
+    if (window.matchMedia('(max-width: 1100px)').matches) setSourcesOpen(true);
+    else if (citation) requestAnimationFrame(() => document.getElementById(`source-${message.id}-${citation.citation_id}`)?.scrollIntoView({block:'nearest', behavior:'smooth'}));
   };
-
-  // Render markdown-like formatted content
-  const renderFormattedContent = (content: string, citations?: Citation[]) => {
-    const lines = content.split('\n');
-    return (
-      <div className="space-y-2 text-[14px] leading-relaxed text-[var(--color-text)] font-body">
-        {lines.map((line, idx) => {
-          if (!line.trim()) return <div key={idx} className="h-1.5" />;
-
-          // Headers
-          if (line.startsWith('### ')) {
-            return (
-              <h4 key={idx} className="font-heading text-base text-[var(--color-text)] mt-3 mb-1 font-bold">
-                {line.replace('### ', '')}
-              </h4>
-            );
-          }
-          if (line.startsWith('## ')) {
-            return (
-              <h3 key={idx} className="font-heading text-lg text-[var(--color-text)] mt-3.5 mb-1 font-bold">
-                {line.replace('## ', '')}
-              </h3>
-            );
-          }
-          if (line.startsWith('# ')) {
-            return (
-              <h2 key={idx} className="font-heading text-xl text-[var(--color-text)] mt-4 mb-2 font-bold">
-                {line.replace('# ', '')}
-              </h2>
-            );
-          }
-
-          // Bullet lists
-          if (line.startsWith('* ') || line.startsWith('- ')) {
-            const clean = line.substring(2);
-            return (
-              <div key={idx} className="flex items-start gap-2 pl-2">
-                <span className="text-[var(--color-accent)] font-bold mt-0.5">•</span>
-                <div className="flex-1">{parseInlineFormatting(clean, citations)}</div>
-              </div>
-            );
-          }
-
-          // Numbered lists
-          const numMatch = line.match(/^(\d+)\.\s(.*)/);
-          if (numMatch) {
-            return (
-              <div key={idx} className="flex items-start gap-2 pl-2">
-                <span className="font-bold text-[var(--color-accent-700)] text-xs mt-0.5">
-                  {numMatch[1]}.
-                </span>
-                <div className="flex-1">{parseInlineFormatting(numMatch[2], citations)}</div>
-              </div>
-            );
-          }
-
-          return <p key={idx} className="m-0">{parseInlineFormatting(line, citations)}</p>;
-        })}
-      </div>
-    );
+  const copy = async (message: ChatMessage) => {
+    try {
+      await navigator.clipboard.writeText(message.content); setCopiedId(message.id); setCopyError('');
+      clearTimeout(copyTimer.current); copyTimer.current = setTimeout(() => setCopiedId(''), 2000);
+    } catch {setCopyError(c.copyError);}
   };
+  const inline = (text: string, message: ChatMessage) => text.split(/(\*\*.*?\*\*|\[\d+\])/g).map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**')) return <strong key={index}>{part.slice(2,-2)}</strong>;
+    const match = part.match(/^\[(\d+)\]$/);
+    const citation = match && message.citations?.find(item => item.citation_id === Number(match[1]));
+    if (citation) return <button key={index} className="citation-chip" aria-label={`${t.sourceCitationBadge} ${citation.citation_id}: ${citation.title}`} aria-pressed={sourceMessage?.id === message.id && selectedCitation === citation.citation_id} onClick={() => showSources(message, citation)}>{citation.citation_id}</button>;
+    return part;
+  });
+  const formatted = (message: ChatMessage) => message.content.split('\n').map((line, index) => {
+    if (!line.trim()) return <div className="paragraph-break" key={index}/>;
+    const heading = line.match(/^(#{1,3})\s+(.+)/);
+    if (heading) return <h3 className={`answer-heading heading-${heading[1].length}`} key={index}>{inline(heading[2], message)}</h3>;
+    const bullet = line.match(/^([-*]|\d+\.)\s+(.+)/);
+    if (bullet) return <div className="answer-list-item" key={index}><span>{/\d/.test(bullet[1]) ? bullet[1] : '•'}</span><div>{inline(bullet[2], message)}</div></div>;
+    return <p key={index}>{inline(line, message)}</p>;
+  });
 
-  // Inline parse for bold **text** and citations [1]
-  const parseInlineFormatting = (text: string, citations?: Citation[]) => {
-    const parts = text.split(/(\*\*.*?\*\*|\[\d+\])/g);
-    return parts.map((part, i) => {
-      if (part.startsWith('**') && part.endsWith('**')) {
-        return (
-          <strong key={i} className="font-semibold text-[var(--color-text)]">
-            {part.slice(2, -2)}
-          </strong>
-        );
-      }
-      const citeMatch = part.match(/^\[(\d+)\]$/);
-      if (citeMatch && citations) {
-        const citeId = parseInt(citeMatch[1], 10);
-        const citeObj = citations.find((c) => c.citation_id === citeId);
-        return (
-          <button
-            key={i}
-            type="button"
-            onClick={() => citeObj && setSelectedCitation(citeObj)}
-            className="inline-flex items-center mx-0.5 px-1.5 py-0.2 rounded-full text-[11px] font-bold bg-[var(--color-accent-100)] text-[var(--color-accent-800)] hover:bg-[var(--color-accent-200)] border border-[var(--color-accent-400)] transition-colors cursor-pointer"
-            title={citeObj ? `查看文獻來源: ${citeObj.title}` : `來源 [${citeId}]`}
-          >
-            [{citeId}]
-          </button>
-        );
-      }
-      return part;
-    });
-  };
+  const sourceCards = <>
+    {!citations.length ? <p className="sources-empty">{c.sourceEmpty}</p> : <div className="source-cards">
+      {citations.map(citation => <article key={citation.citation_id} id={`source-${sourceMessage?.id}-${citation.citation_id}`} className={`citation-card ${selectedCitation === citation.citation_id ? 'is-selected' : ''}`}>
+        <button className="citation-card-select" aria-expanded={selectedCitation === citation.citation_id} onClick={() => setSelectedCitation(selectedCitation === citation.citation_id ? null : citation.citation_id)}>
+          <span className="citation-card-title"><span className="citation-number">[{citation.citation_id}]</span><strong>{citation.title}</strong></span>
+          <span className="citation-meta">{CONTENT_LANGUAGES[citation.language as keyof typeof CONTENT_LANGUAGES] || citation.language}{citation.page_start != null && ` · ${c.page} ${citation.page_start}${citation.page_end && citation.page_end !== citation.page_start ? `–${citation.page_end}` : ''}`}</span>
+          {citation.snippet && <span className="citation-snippet" dir="auto">{citation.snippet}</span>}
+        </button>
+        {selectedCitation === citation.citation_id && <div className="citation-actions">
+          {citation.document_id ? <button className="btn btn-secondary" onClick={() => {setSourcesOpen(false); onOpenSource(citation.document_id!);}}>{c.read}</button> : citation.link && /^https?:\/\//i.test(citation.link) ? <a className="btn btn-secondary" href={citation.link} target="_blank" rel="noreferrer">{c.read}</a> : null}
+        </div>}
+      </article>)}
+      <p className="field-hint">{c.sourceHint}</p>
+    </div>}
+  </>;
 
-  return (
-    <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
-      {/* Top Focus Bar */}
-      <div className="flex-none flex items-center gap-3 px-5 py-3 border-b border-[var(--color-neutral-200)] bg-[var(--color-bg)] z-10">
-        <div className="ml-auto flex items-center gap-2">
-          {messages.length > 0 && (
-            <button
-              type="button"
-              disabled={loading}
-              onClick={onClearHistory}
-              className="btn btn-ghost text-xs px-2.5 py-1 text-[var(--color-neutral-600)] hover:text-red-700"
-              title={t.clearHistoryTitle}
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{t.restartBtn}</span>
-            </button>
-          )}
-
-        </div>
+  return <>
+    <main className="chat-view">
+      <div className="compact-source-bar"><button className="btn btn-ghost" onClick={() => setSourcesOpen(true)}><BookOpen size={15}/>{c.sourceToggle}{citations.length > 0 && <span className="count-badge">{citations.length}</span>}</button></div>
+      <div className="chat-scroll" ref={scrollArea} onScroll={event => {const el = event.currentTarget; followStream.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100;}}>
+        {messages.length === 0 ? <div className="welcome">
+          <span className="welcome-dot"/>
+          <h1>{t.welcomeTitle}</h1><p className="welcome-description">{t.welcomeDesc}</p>
+          <h2 className="eyebrow">{c.samples}</h2>
+          <div className="sample-questions">{t.sampleQuestions.map(question => <button key={question} disabled={loading} onClick={() => onSendMessage(question)}>{question}</button>)}</div>
+          <div className="welcome-steps">{c.steps.map((step, index) => <div key={step}><span>0{index + 1}</span><p>{step}</p></div>)}</div>
+        </div> : <div className="conversation">
+          {messages.map(message => message.role === 'user' ? <div className="user-message" key={message.id}><p dir="auto">{message.content}</p></div> : <article className="assistant-message" key={message.id}>
+            {message.isStreaming && !message.content && <div className="search-status" role="status"><span className="loading-dots"><i/><i/><i/></span><span>{t.searchingText}</span></div>}
+            <div className="answer-content" dir="auto" lang={message.response_language}>{formatted(message)}</div>
+            {message.error && <p role="alert" className="error-message">{message.error}</p>}
+            {message.isStreaming && message.content && <span className="streaming-mark" role="status" aria-label={t.searchingText}/>}
+            {!message.isStreaming && <footer className="answer-footer">
+              <span className="answer-time">{message.timestamp}</span>
+              {!!message.citations?.length && <button className="btn btn-ghost answer-sources" onClick={() => showSources(message)}><BookOpen size={14}/>{t.sourcesHeader} · {message.citations.length}</button>}
+              <button className="btn btn-ghost" disabled={!message.content} onClick={() => void copy(message)}>{copiedId === message.id ? <Check size={13}/> : <Copy size={13}/>}{copiedId === message.id ? t.copiedBtn : t.copyBtn}</button>
+              <button className="btn btn-ghost" disabled={loading} onClick={onClearHistory} title={t.clearHistoryTitle}><RotateCcw size={13}/>{t.restartBtn}</button>
+            </footer>}
+          </article>)}
+          {copyError && <p role="alert" className="error-message">{copyError}</p>}
+        </div>}
       </div>
-
-      {/* Messages Scroll Area */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-        {messages.length === 0 ? (
-          <div className="max-w-2xl w-full mx-auto flex flex-col items-center gap-3 text-center pt-6 sm:pt-10">
-            {/* Friendly Bot Avatar Circle */}
-            <div className="w-16 h-16 rounded-full bg-[var(--color-accent-2-100)] text-[var(--color-accent-2-700)] flex items-center justify-center shadow-xs">
-              <Bot className="w-8 h-8" />
-            </div>
-
-            {/* Welcome Title & Desc */}
-            <h2 className="font-heading text-xl sm:text-2xl text-[var(--color-text)] m-0">
-              {t.welcomeTitle}
-            </h2>
-            <p className="m-0 text-xs sm:text-[13.5px] text-[var(--color-neutral-700)] leading-relaxed max-w-lg">
-              {t.welcomeDesc}
-            </p>
-            <div className="flex flex-wrap justify-center gap-2 mt-3">{t.sampleQuestions.map(question=><button key={question} className="btn text-xs" disabled={loading} onClick={()=>onSendMessage(question)}>{question}</button>)}</div>
-          </div>
-        ) : (
-          messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex gap-3 max-w-3xl ${
-                msg.role === 'user' ? 'ml-auto flex-row-reverse' : ''
-              }`}
-            >
-              {/* Avatar */}
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center flex-none text-white shadow-2xs ${
-                  msg.role === 'user'
-                    ? 'bg-[var(--color-accent-700)]'
-                    : 'bg-gradient-to-br from-[var(--color-accent-2-600)] to-[var(--color-accent-2-800)]'
-                }`}
-              >
-                {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
-              </div>
-
-              {/* Message Bubble */}
-              <div
-                className={`rounded-[24px] p-4 text-sm transition-all ${
-                  msg.role === 'user'
-                    ? 'bg-[var(--color-accent)] text-white rounded-tr-xs shadow-xs max-w-lg'
-                    : 'bg-[var(--color-neutral-100)] border border-[var(--color-neutral-200)] rounded-tl-xs shadow-xs flex-1'
-                }`}
-              >
-                {msg.role === 'user' ? (
-                  <p dir="auto" className="m-0 leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                ) : (
-                  <div>
-                    <div dir="auto" lang={msg.response_language}>{renderFormattedContent(msg.content, msg.citations)}</div>
-                    {msg.error && <p role="alert" className="text-red-700">{msg.error}</p>}
-
-                    {/* Citations List if present */}
-                    {msg.citations && msg.citations.length > 0 && (
-                      <div className="mt-4 pt-3 border-t border-[var(--color-divider)]">
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--color-neutral-700)] mb-2">
-                          <BookOpen className="w-3.5 h-3.5 text-[var(--color-accent-600)]" />
-                          <span>{t.sourcesHeader} ({msg.citations.length}):</span>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {msg.citations.map((c) => (
-                            <button
-                              key={c.citation_id}
-                              type="button"
-                              onClick={() => setSelectedCitation(c)}
-                              className="text-xs bg-[var(--color-surface)] border border-[var(--color-divider)] hover:border-[var(--color-accent)] px-2.5 py-1 rounded-full text-[var(--color-text)] hover:text-[var(--color-accent-700)] transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
-                            >
-                              <span className="font-bold text-[var(--color-accent-700)]">[{c.citation_id}]</span>
-                              <span className="truncate max-w-[200px]">{c.title} {c.language ? `(${c.language})` : ""}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Footer: Timestamp & Copy button */}
-                    <div className="flex items-center justify-between mt-3 pt-2 text-[11px] text-[var(--color-neutral-500)]">
-                      <span>{msg.timestamp}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleCopy(msg.id, msg.content)}
-                        className="btn btn-ghost text-[11px] px-2 py-0.5"
-                      >
-                        {copiedId === msg.id ? (
-                          <>
-                            <Check className="w-3 h-3 text-[var(--color-accent-2-700)]" />
-                            <span className="text-[var(--color-accent-2-700)] font-bold">{t.copiedBtn}</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3" />
-                            <span>{t.copyBtn}</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          ))
-        )}
-
-        {/* Streaming Loading Indicator */}
-        {loading && (
-          <div className="flex gap-3 max-w-2xl">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--color-accent-2-600)] to-[var(--color-accent-2-800)] flex items-center justify-center flex-none text-white shadow-2xs">
-              <Bot className="w-4 h-4" />
-            </div>
-            <div className="bg-[var(--color-neutral-100)] border border-[var(--color-neutral-200)] rounded-[24px] rounded-tl-xs p-4 flex items-center gap-2.5">
-              <div className="flex gap-1">
-                <div className="w-2 h-2 rounded-full bg-[var(--color-accent)] animate-bounce" />
-                <div className="w-2 h-2 rounded-full bg-[var(--color-accent)] animate-bounce [animation-delay:0.2s]" />
-                <div className="w-2 h-2 rounded-full bg-[var(--color-accent)] animate-bounce [animation-delay:0.4s]" />
-              </div>
-              <span className="text-xs text-[var(--color-neutral-600)]">
-                {t.searchingText}
-              </span>
-            </div>
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Citation Modal / Drawer */}
-      {selectedCitation && (
-        <div className="absolute inset-x-0 bottom-0 bg-[var(--color-bg)] border-t-2 border-[var(--color-accent)] p-4 shadow-xl z-30 transition-all max-h-72 overflow-y-auto animate-fade-up">
-          <div className="flex items-start justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <span className="tag tag-accent text-xs font-bold">
-                [{selectedCitation.citation_id}] {t.sourceCitationBadge}
-              </span>
-              <h4 className="font-heading font-bold text-[var(--color-text)] text-sm m-0">
-                {selectedCitation.title}
-              </h4>
-            </div>
-            <button
-              type="button"
-              onClick={() => setSelectedCitation(null)}
-              className="btn btn-icon btn-ghost text-[var(--color-neutral-600)]"
-              aria-label={t.drawerCloseLabel}
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div dir="auto" className="bg-[var(--color-surface)] rounded-[var(--radius-md)] p-3 border border-[var(--color-divider)] text-xs text-[var(--color-text)] leading-relaxed font-mono whitespace-pre-wrap">
-            {selectedCitation.snippet || selectedCitation.title}
-          </div>
-          {selectedCitation.document_id && <button className="btn btn-primary" onClick={() => {onOpenSource(selectedCitation.document_id!); setSelectedCitation(null);}}>查看原文／翻譯</button>}
-          {selectedCitation.link && (
-            <div className="mt-2 flex justify-end">
-              <span className="text-[11px] text-[var(--color-neutral-500)] truncate">
-                {selectedCitation.link}
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Bottom Input Bar */}
-      <div className="flex-none border-t border-[var(--color-neutral-200)] p-4 sm:px-6 bg-[var(--color-bg)] flex flex-col gap-1.5">
-        <form
-          onSubmit={handleSubmit}
-          className="flex gap-2.5 items-center max-w-[820px] w-full mx-auto"
-        >
-          <input
-            className="input flex-1"
-            type="text"
-            dir="auto"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onCompositionStart={() => setIsComposing(true)}
-            onCompositionEnd={() => setIsComposing(false)}
-            placeholder={t.inputPlaceholder}
-            disabled={loading}
-            style={{
-              minHeight: '42px',
-              paddingInline: '18px',
-              backgroundColor: 'var(--color-surface)',
-              borderColor: 'var(--color-divider)',
-              color: 'var(--color-text)'
-            }}
-          />
-          <button
-            type="submit"
-            disabled={!inputText.trim() || loading}
-            className="btn btn-primary btn-icon flex-none shadow-sm"
-            aria-label={t.sendAriaLabel}
-          >
-            <Send className="icn" />
-          </button>
+      <div className="composer">
+        <form onSubmit={handleSubmit}>
+          <textarea ref={input} rows={1} dir="auto" value={inputText} onChange={e => setInputText(e.target.value)} onKeyDown={handleKeyDown} onCompositionStart={() => setIsComposing(true)} onCompositionEnd={() => setIsComposing(false)} placeholder={t.inputPlaceholder} aria-label={t.inputPlaceholder} readOnly={loading}/>
+          <button className="btn btn-primary send-button" disabled={!inputText.trim() || loading || isComposing} aria-label={t.sendAriaLabel}>{c.send}</button>
         </form>
-        <div className="text-[11px] text-[var(--color-neutral-500)] text-center">
-          {t.multilingualNote}
-        </div>
+        <p>{t.multilingualNote}</p>
       </div>
-    </div>
-  );
-};
+    </main>
+    <aside className="sources-sidebar" aria-label={c.sourceTitle}><div className="sources-header"><h2 className="eyebrow">{c.sourceTitle}</h2></div>{sourceCards}</aside>
+    {sourcesOpen && <WorkspacePanel title={c.sourceTitle} className="sources-panel" onClose={() => setSourcesOpen(false)}>{sourceCards}</WorkspacePanel>}
+  </>;
+}

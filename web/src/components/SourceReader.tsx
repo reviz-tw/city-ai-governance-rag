@@ -1,3 +1,4 @@
+import {WorkspacePanel} from './WorkspacePanel';
 import {useEffect, useState} from 'react';
 import {api, jsonRequest} from '../lib/api';
 import {CONTENT_LANGUAGES} from '../lib/languages';
@@ -15,7 +16,7 @@ export function SourceReader({id, language, onClose}: {id: string; language: str
     catch (err: any) {setError(err.message);}
   };
   if (job) return <JobView id={job} onClose={() => setJob('')}/>;
-  return <section className="workspace-panel"><button onClick={onClose}>關閉</button>{error && <p role="alert">{error}</p>}
+  return <WorkspacePanel title="原文與翻譯" onClose={onClose}>{error && <p role="alert">{error}</p>}
     {doc && <><h2>{doc.title}</h2><p>原始語言：{doc.language} · 版本：{doc.original_hash.slice(0,12)}</p>
       <a className="btn" href={`/api/library/${id}/original`}>查看原始文件</a>
       <label>翻譯目標<select value={target} onChange={e => setTarget(e.target.value)}>{Object.entries(CONTENT_LANGUAGES).map(([code,name]) => <option key={code} value={code}>{name}</option>)}</select></label>
@@ -25,5 +26,5 @@ export function SourceReader({id, language, onClose}: {id: string; language: str
       <button className="btn" onClick={() => translate('document')}>翻譯全文</button>
       {doc.blocks.map((b: any) => <div key={b.id} className="source-block" dir="auto"><label><input type="checkbox" checked={blocks.includes(b.id)} onChange={e => setBlocks(e.target.checked ? [...blocks,b.id] : blocks.filter(v=>v!==b.id))}/>{b.id} · 頁碼 {b.page ?? '未提供'}</label><p>{b.text}</p></div>)}
     </>}
-  </section>;
+  </WorkspacePanel>;
 }
