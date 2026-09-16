@@ -5,7 +5,7 @@
 ## 已通過
 
 - 本機 pytest：61 項；前端 Node 契約測試：3 項；TypeScript／Vite build 成功。涵蓋語言優先序、短句 fallback、來源篩選、有限 context、SSE Unicode 逐 byte 分界、截斷錯誤、文件／任務隔離、版本變更、取消／重試／TTL、數字引用、草稿／實際發布差別、取消競爭、MCP 憑證範圍／撤銷與 worker 身分。包含索引延後續查、原 operation 重用、任務結束不殘留 pending、掃描頁拒絕翻譯、Word 表格順序及不支援語言在寫入儲存前拒絕等回歸測試。
-- Linux 容器：最終 Cloud Build `a972317a-07ce-4bd4-92d2-785e3a9bd880` SUCCESS，2026-09-16 15:19:08 UTC 完成；build log 確認 61 項後端測試通過及前端建置成功。映像標籤 `todo-20260916-r7`，依賴層重用前版快取；前一個完整建置 `0b4f6553-210d-4047-8f75-c090abb24b16` 亦 SUCCESS。尚未執行 GitHub 遠端 CI，也尚未 commit／push。
+- Linux 容器：最終 Cloud Build `a972317a-07ce-4bd4-92d2-785e3a9bd880` SUCCESS，2026-09-16 15:19:08 UTC 完成；build log 確認 61 項後端測試通過及前端建置成功。映像標籤 `todo-20260916-r7`，依賴層重用前版快取；前一個完整建置 `0b4f6553-210d-4047-8f75-c090abb24b16` 亦 SUCCESS。
 - Google OAuth Client 已建立。localhost 以 hcchien@gmail.com 真實 Google 登入取得 HTTP 200，介面顯示本人帳號且沒有編輯／發布權限。Google Identity Services callback 僅傳 ID token；未讀取或保存 client secret。
 - Vertex global 真實呼叫：`gemini-3.7-flash` 與 `gemini-3.5-flash-lite` 皆成功。繁中 RAG 有 `[1]` 原文引用；英文 SSE 有實際增量片段並完成。PDF、可編輯 PPTX、LibreOffice 預覽 PDF 及統計圖生成成功。
 - 字型與排版：實際產出 PDF／PPTX 轉 PDF 的繁中字形已檢視；中英混排與流程箭頭有固定渲染檢查。不是僅檢查模型輸出字串。
@@ -30,6 +30,15 @@
 
 - 自訂 chunks 的 Search：隔離 store／engine 查詢仍回空結果，semanticState=DISABLED。三份英／繁中／日合成文件的 operation `import-documents-11482740810101247929` 在 14:30:38 UTC 回報 done=true、failureCount=3，錯誤 code 14：文件已匯入且分段完成，但尚未完成索引。15:14:22 UTC 再查仍回傳 0 筆、semanticState=DISABLED；英／繁中／日查詢均尚無命中；不能把 operation 結束或 chunks 可讀當成 Search 成功。因此跨語 Search 不算通過，也尚未開啟新文件發布。
 - 完整政策文件的翻譯人工驗收。已有結構／數字保護與部分內容抽驗，不能宣稱所有真實內容品質已獲人工認可。
+
+## Commit／push 後複驗
+
+- 實作 commit `bd2f49841206c93f1cc1b3d1622cf6b302da91cb` 已依使用者要求推送至 `origin/main`，推送後核對遠端 SHA 相同。[GitHub Actions](https://github.com/reviz-tw/city-ai-governance-rag/actions/runs/35115888614) 於 2026-09-16 15:32:36 UTC 完成且成功；實際 log 為後端 61 項、前端 3 項測試通過及 Vite build 成功。
+- 同次複驗重新呼叫 Vertex global 的 `gemini-3.7-flash` 與 `gemini-3.5-flash-lite`，最小測試提示均成功取得模型回覆。
+- 15:32:10 UTC，原資料庫 `city-governance-datastore` 以「人工智慧」查詢，`totalSize=20`，要求的 5 筆結果均有回傳，`semanticState=ENABLED`。這確認既有搜尋可用，但不代表新的自訂 chunks 已可搜尋。
+- 同時讀取隔離測試資料庫及 engine：chunking 設定存在，engine 為 Enterprise 且連接正確的 v2 store；英文、中文、英文來源 filter、直接 store／engine 路徑及 DOCUMENTS／CHUNKS 模式皆回空結果，沒有 API 權限錯誤。
+- 三份多語文件的 `indexStatus.pendingMessage` 仍為分段完成、索引處理中；英文字塊可直接列出。較早的 `synthetic-chunk-document` 雖有 `indexTime=2026-09-16T12:44:26Z` 且只列出新版 `merged` chunk，以其原文關鍵字或 `*` 搜尋仍無結果。因此單憑 import 完成、indexTime 或 chunks.list 不能通過驗收。
+- `semanticState=DISABLED` 僅表示該次回應沒有啟用語意搜尋；[官方欄位定義](https://docs.cloud.google.com/generative-ai-app-builder/docs/reference/rest/v1alpha/SearchResponse#SemanticState) 未提供原因。現有證據尚無法斷定是索引就緒時間、BYO chunks 服務問題或其他設定所致，也不能推論購買 LLM add-on 就能修復。此次未重新匯入、修改計費設定或切換 Cloud Run 流量，`CHUNK_INDEX_ENABLED=false` 及未完成驗收維持原狀。
 
 ## 外部依據
 
