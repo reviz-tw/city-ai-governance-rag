@@ -10,6 +10,9 @@
 - `http://localhost:8080`
 - `http://localhost:5173`
 - `https://candidate---city-rag-backend-dev-wvswpuk2tq-de.a.run.app`（dev 候選版）
+- `https://city-rag-backend-dev-59297909591.asia-east1.run.app`（Cloud Run Console 顯示的網址，2026-09-17 核對已登記）
+
+網站來源必須同時存在於 Google OAuth 的 JavaScript 來源及後端 `ALLOWED_ORIGINS`。漏掉前者會出現 Google `origin_mismatch`，漏掉後者會在 `/api/auth/login` 回傳 `403 Untrusted request origin`。2026-09-17 已將 Console 網址補入 `infra/env.dev.yaml` 與 `.env.example`；Cloud Run 的兩種網址皆須保留，不能只設定其中一個。來源只填 scheme、hostname 與必要的 port，不含路徑或末尾斜線。
 
 目前採 Google Identity Services 的 JavaScript callback，後端驗證 ID token；不使用授權碼交換，因此沒有 redirect URI，也不需要 client secret。未下載或保存 Google 產生的 client secret。
 

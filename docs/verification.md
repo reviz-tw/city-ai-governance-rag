@@ -72,3 +72,9 @@
 
 - 隔離來源建置 `ba8092c2-cbdf-4bc9-a6aa-8af62b5ed325` SUCCESS，70 項後端測試，digest `sha256:5e227aff6d5fa4d4dcacbf72ba13d165e64c374e1a2b4f96a691fdb2c543c346`。以正常 Google 登入在候選版檢視既有文件 Diff，確認切片邊界／原文範圍可見，確認發布按鈕可用，未修改或發布該研究文件。
 - 實作 commit `61584f6e7087851181bf3af2a0e23cf61a4413a7` 已推送；[GitHub CI](https://github.com/reviz-tw/city-ai-governance-rag/actions/runs/35127373067) success。相同 commit 的區域自動建置 `e94d3930-0c95-4c9e-a414-11ec07d9659e` 產生 `00047-pol`，digest 與隔離建置完全一致；追加修正已切換 100% 流量至此 revision。
+
+## 2026-09-17：Cloud Run Console 網址的登入來源
+
+- `https://city-rag-backend-dev-59297909591.asia-east1.run.app` 已登記於 Google OAuth，但後端允許清單原先只有舊網址及 candidate，造成登入回呼 `403 Untrusted request origin`。已在部署檔及環境範例補齊。
+- 修正使用當時正在承接流量的 `00050-tav` 相同映像 `sha256:2b520f73069fbf1ffd0226295be89f60e1fcf0034b4e74e5c9d8584c3d877740`，保留新版研究介面，只調整來源清單。`00053-qon` 已承接 100% 流量。
+- 候選版與 Console 正式網址皆以無效 credential 測試：正確 Origin 進入 Google token 驗證並回傳 401；陌生 Origin 仍為 403。正式網址 `/api/health` 回傳 200。測試未讀取簽章密鑰或自行產生管理員憑證。
