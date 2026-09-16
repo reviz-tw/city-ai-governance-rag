@@ -26,7 +26,7 @@ steps:
       - '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}'
     id: 'push-image'
 
-  # 3. Deploy a candidate revision. Existing traffic changes only after acceptance.
+  # 3. Deploy to the existing service; the fixed candidate tag is only for smoke checks.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -45,6 +45,7 @@ steps:
       - '--cpu-boost'
       - '--no-traffic'
       - '--tag=candidate'
+      - '--revision-suffix=b-${BUILD_ID}'
       - '--timeout=1800'
       - '--concurrency=8'
       - '--env-vars-file=infra/env.dev.yaml'
@@ -52,19 +53,33 @@ steps:
       - '--add-cloudsql-instances=${PROJECT_ID}:${_LOCATION}:${_SQL_INSTANCE}'
     id: 'deploy-cloud-run'
 
+  # 4. Verify authentication and Admin, then move the same service URL to this revision.
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: python3
+    args:
+      - 'infra/verify_deployment.py'
+      - '${_SERVICE_NAME}'
+      - '${_LOCATION}'
+      - '$PROJECT_ID'
+      - '${_SERVICE_NAME}-b-${BUILD_ID}'
+      - '${_SERVICE_URL}'
+    id: 'verify-and-promote'
+
 images:
   - '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:${_TAG}'
   - '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:latest'
 
 substitutions:
-  _TAG: 'latest'
+  _TAG: '${BUILD_ID}'
   _LOCATION: 'asia-east1'
   _REPO_NAME: 'haystack-dev'
   _IMAGE_NAME: 'city-rag-backend-dev'
   _SERVICE_NAME: 'city-rag-backend-dev'
+  _SERVICE_URL: 'https://city-rag-backend-dev-wvswpuk2tq-de.a.run.app'
   _SQL_INSTANCE: 'city-governance-postgres'
   _SESSION_SECRET: 'city-governance-session'
   _DATABASE_SECRET: 'city-governance-database-url'
 
 options:
   logging: CLOUD_LOGGING_ONLY
+  dynamicSubstitutions: true

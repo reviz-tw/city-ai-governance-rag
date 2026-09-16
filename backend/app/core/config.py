@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     CLOUD_TASKS_QUEUE: str = ""
     WORKER_SERVICE_ACCOUNT: str = ""
     APP_ORIGIN: str = "http://localhost:8080"
+    WORKER_LEGACY_ORIGINS: list[str] = []
     CHUNK_INDEX_ENABLED: bool = False
     CHUNK_DATA_STORE_ID: str = ""
     CHUNK_SEARCH_ENGINE_ID: str = ""

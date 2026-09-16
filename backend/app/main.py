@@ -188,7 +188,7 @@ logger.info("MCP 整合端點已成功掛載於 /mcp (支援 Streamable HTTP 及
 # 掛載 Admin UI 靜態檔案
 admin_static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(admin_static_dir):
-    app.mount("/admin", StaticFiles(directory=admin_static_dir, html=True), name="admin_static")
+    app.mount("/admin/tools", StaticFiles(directory=admin_static_dir, html=True), name="admin_tools")
 
 # 尋找前端 React SPA 編譯目錄 (支援 /app/web_dist, /app/static/dist, 或 ../web/dist)
 possible_web_dirs = [
@@ -209,6 +209,11 @@ if web_dist_dir:
     assets_dir = os.path.join(web_dist_dir, "assets")
     if os.path.exists(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/admin")
+    @app.get("/admin/")
+    async def admin_ui():
+        return FileResponse(os.path.join(web_dist_dir, "index.html"), headers={"Cache-Control": "no-cache"})
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
@@ -272,7 +277,9 @@ def verify_worker(request: Request):
         raise HTTPException(503, 'Cloud worker is not configured')
     try:
         credential=request.headers.get('authorization','').removeprefix('Bearer ')
-        claims=id_token.verify_oauth2_token(credential,GoogleRequest(),settings.APP_ORIGIN)
+        claims=id_token.verify_oauth2_token(credential,GoogleRequest(),None)
+        if claims.get("aud") not in [settings.APP_ORIGIN, *settings.WORKER_LEGACY_ORIGINS]:
+            raise ValueError("Wrong worker audience")
         if claims.get('email') != settings.WORKER_SERVICE_ACCOUNT or not claims.get('email_verified'):
             raise ValueError('Wrong worker identity')
     except Exception:

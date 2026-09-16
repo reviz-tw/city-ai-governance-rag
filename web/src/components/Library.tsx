@@ -1,13 +1,23 @@
 import {WorkspacePanel} from './WorkspacePanel';
-import {useEffect, useState} from 'react';
-import {api, jsonRequest} from '../lib/api';
+import {ReactNode, useEffect, useState} from 'react';
+import {api, apiList, jsonRequest} from '../lib/api';
 import {JobView} from './ArtifactPanel';
 import {splitChunk} from '../lib/chunks';
-export function Library({editor, onClose, onRead}: {editor: boolean; onClose: () => void; onRead: (id:string)=>void}) {
+
+function LibraryFrame({standalone, onClose, children}: {standalone:boolean; onClose:()=>void; children:ReactNode}) {
+  if (!standalone) return <WorkspacePanel title="來源文件庫" onClose={onClose}>{children}</WorkspacePanel>;
+  return <main className="admin-library"><header className="admin-library-header"><div><p className="eyebrow">City AI governance · Admin</p><h1>治理文件庫與切片狀態</h1></div><nav><a href="/">返回研究介面</a><a href="/admin/tools/">AI 標註工具</a></nav></header>{children}</main>;
+}
+
+export function Library({editor, admin=false, standalone=false, onClose, onRead}: {editor:boolean; admin?:boolean; standalone?:boolean; onClose:()=>void; onRead:(id:string)=>void}) {
   const [docs, setDocs] = useState<any[]>([]);
+  const [legacy, setLegacy] = useState<any[]>([]);
+  const [legacyError, setLegacyError] = useState('');
   const [loading, setLoading] = useState(true);
   const [doc, setDoc] = useState<any>(null);
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [filter, setFilter] = useState('');
   const [file, setFile] = useState<File|null>(null);
   const [rights, setRights] = useState(false);
   const [cleaned, setCleaned] = useState('');
@@ -18,47 +28,81 @@ export function Library({editor, onClose, onRead}: {editor: boolean; onClose: ()
   const [indexed, setIndexed] = useState<any>(null);
   const [language,setLanguage] = useState('');
   const [city,setCity] = useState('');
+  const [chunkSize,setChunkSize] = useState(1500);
   const loadDoc=(value:any)=>{setDoc(value);setSavedDraft(JSON.stringify(value.draft));setDiff('');setDiffHash('');setIndexed(null);};
   const dirty=doc && JSON.stringify(doc.draft)!==savedDraft;
   useEffect(()=>setDiffHash(''),[doc]);
-  const refresh = () => api('/api/library').then(setDocs).catch(e=>setError(e.message)).finally(()=>setLoading(false));
-  useEffect(()=>{void refresh();}, []);
-  const save = async (reset=false) => {
-    try {
-      const result = await api(`/api/library/${doc.id}/draft`, jsonRequest({revision:doc.draft_revision, chunks:doc.draft, reset}));
-      loadDoc(result); setDiff('已儲存草稿，尚未發布或更新搜尋索引。');
-    } catch(e:any){setError(e.message);}
+  const refresh = async () => {
+    setLoading(true);
+    try {setDocs(await apiList('/api/library'));} catch(e:any) {setError(e.message);}
+    finally {setLoading(false);}
   };
-  if(job) return <JobView id={job} onClose={()=>{setJob(''); void refresh();if(doc)void api(`/api/library/${doc.id}`).then(loadDoc).catch(e=>setError(e.message));}}/>;
-  return <WorkspacePanel title="來源文件庫" onClose={onClose}>
-    <p className="panel-intro">系統目前讀得到的原始文件。每一份都保留原檔、版本與頁碼。</p>
+  const refreshLegacy = async () => {
+    setLegacyError('');
+    try {setLegacy(await apiList('/api/library/legacy'));} catch(e:any) {setLegacyError(e.message);}
+  };
+  useEffect(()=>{void refresh();void refreshLegacy();}, []);
+  const run = async (action:()=>Promise<void>) => {
+    setBusy(true);setError('');
+    try {await action();} catch(e:any) {setError(e.message);} finally {setBusy(false);}
+  };
+  const save = async (reset=false) => {
+    if(reset && !window.confirm('將依原始擷取文字重新切片，取代目前草稿。已發布版本不變，是否繼續？')) return;
+    await run(async()=>{
+      const result = await api(`/api/library/${doc.id}/draft`, jsonRequest({revision:doc.draft_revision, chunks:doc.draft, reset, chunk_size:reset ? chunkSize : undefined}));
+      loadDoc(result);setDiff('已儲存草稿，尚未發布或更新搜尋索引。');await refresh();
+    });
+  };
+  const openDocument = async (id:string) => {
+    if(dirty && !window.confirm('目前有尚未儲存的切片修改，是否放棄並開啟另一份文件？')) return;
+    await run(async()=>loadDoc(await api(`/api/library/${id}`)));
+  };
+  const mutateChunks=(values:any[])=>setDoc({...doc,draft:values.map((value,order)=>({...value,order}))});
+  const matches=(title:string)=>title.toLowerCase().includes(filter.toLowerCase());
+  const historical=legacy.filter(item=>!docs.some(d=>d.legacy_filename===item.filename) && matches(item.filename));
+  const pending=doc?.index_status==='pending';
+  if(job) return <JobView id={job} onClose={()=>{setJob('');void refresh();if(doc)void run(async()=>loadDoc(await api(`/api/library/${doc.id}`)));}}/>;
+  return <LibraryFrame standalone={standalone} onClose={onClose}>
+    <p className="panel-intro">保留原始文件與頁碼；編輯切片後先儲存草稿、查看發布差異，再送出索引。</p>
     {error && <p role="alert">{error}</p>}
-    {editor && <details><summary>新增文件</summary><input type="file" accept=".pdf,.docx,.txt,.md" onChange={e=>setFile(e.target.files?.[0]||null)}/>
+    <fieldset disabled={busy} className="library-controls">
+    {editor && <details><summary>新增文件</summary><label>原始文件<input type="file" accept=".pdf,.docx,.txt,.md" onChange={e=>setFile(e.target.files?.[0]||null)}/></label>
       <label>原文語言（留空自動偵測）<input value={language} onChange={e=>setLanguage(e.target.value)} placeholder="zh-TW / en / ja"/></label>
       <label>研究城市（選填）<input value={city} onChange={e=>setCity(e.target.value)}/></label>
       <label>清理後文字（選填；另存為草稿，不覆寫原文）<textarea value={cleaned} onChange={e=>setCleaned(e.target.value)}/></label>
       <label><input type="checkbox" checked={rights} onChange={e=>setRights(e.target.checked)}/>已確認可處理、翻譯並依設定分享此文件</label>
-      <button className="btn" disabled={!file||!rights} onClick={async()=>{if(!file)return;try{const form=new FormData();form.append('file',file);form.append('rights_confirmed','true');form.append('language',language);form.append('city',city);if(cleaned)form.append('cleaned_text',cleaned);const d=await api('/api/library',{method:'POST',body:form});loadDoc(await api(`/api/library/${d.id}`));await refresh();}catch(e:any){setError(e.message);}}}>上傳並建立草稿</button>
+      <button className="btn" disabled={!file||!rights} onClick={()=>run(async()=>{if(!file)return;const form=new FormData();form.append('file',file);form.append('rights_confirmed','true');form.append('language',language);form.append('city',city);if(cleaned)form.append('cleaned_text',cleaned);const d=await api('/api/library',{method:'POST',body:form});loadDoc(await api(`/api/library/${d.id}`));await refresh();})}>上傳並建立草稿</button>
     </details>}
+    <div className="library-toolbar"><label>搜尋文件<input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="輸入文件名稱"/></label><button className="btn" onClick={()=>run(async()=>{await refresh();await refreshLegacy();})}>重新整理清單</button></div>
     {loading && <p role="status">正在載入文件……</p>}
-    {!loading && !docs.length && !error && <p className="empty-panel">目前沒有可讀取的文件。</p>}
-    {docs.map(d=><div key={d.id} className="library-row"><div><strong>{d.title}</strong><p>{d.language} · {d.index_status} · v{d.published_version}</p></div><div className="library-actions"><button className="btn btn-secondary" onClick={()=>onRead(d.id)}>原文／翻譯</button>{d.editable&&<button className="btn btn-ghost" onClick={async()=>{try{loadDoc(await api(`/api/library/${d.id}`));}catch(e:any){setError(e.message);}}}>修正草稿</button>}</div></div>)}
-    {doc && editor && <div><h3>{doc.title} · 草稿修訂 {doc.draft_revision}</h3><p>索引狀態：{doc.index_status}；發布版本：{doc.published_version}</p>
-      <div className="parallel-text"><div><h3>原始擷取</h3>{doc.blocks?.map((b:any)=><p key={b.id} dir="auto">{b.id} · 頁 {b.page??"—"} · {b.text}</p>)}</div><div><h3>切片草稿</h3>{doc.draft?.map((c:any,i:number)=><div key={c.id}><small>{c.id} · {c.refs.map((r:any)=>`${r.block_id}（頁 ${r.page??'—'}）`).join(', ')}</small><textarea value={c.content} dir="auto" onChange={e=>setDoc({...doc,draft:doc.draft.map((v:any,j:number)=>i===j?{...v,content:e.target.value}:v)})}/>
-        <button disabled={i===doc.draft.length-1} onClick={()=>{const next=doc.draft[i+1];const merged={...c,content:c.content+'\n\n'+next.content,refs:[...c.refs,...next.refs]};setDoc({...doc,draft:[...doc.draft.slice(0,i),merged,...doc.draft.slice(i+2)].map((v:any,order:number)=>({...v,order}))});}}>與下一片合併</button>
-        <button disabled={c.content.trim().length<2} onClick={()=>{const parts=splitChunk(c,doc.blocks,crypto.randomUUID());if(parts)setDoc({...doc,draft:[...doc.draft.slice(0,i),...parts,...doc.draft.slice(i+1)].map((v:any,order:number)=>({...v,order}))});}}>拆分為兩片</button>
+    {!loading && !docs.length && !legacy.length && !error && !legacyError && <p className="empty-panel">目前沒有可讀取的文件。</p>}
+    {docs.filter(d=>matches(d.title)).map(d=><div key={d.id} className="library-row"><div><strong>{d.title}</strong><p>{d.language} · {d.index_status} · 發布 v{d.published_version} · 草稿 {d.draft_revision}</p></div><div className="library-actions"><button className="btn btn-secondary" onClick={()=>onRead(d.id)}>原文／翻譯</button>{d.editable&&<button className="btn btn-ghost" onClick={()=>openDocument(d.id)}>編輯切片</button>}</div></div>)}
+    {legacyError && <p role="alert">既有來源清單：{legacyError}</p>}
+    {historical.length>0 && <details><summary>既有治理文件（{historical.length}）</summary><p>既有共用來源由管理員建立切片草稿；其他編輯者可管理自己上傳的文件。</p>{historical.map(item=><div className="library-row" key={item.filename}><div><strong>{item.filename}</strong><p>{item.language} · 既有來源，尚未建立人工切片版本</p></div>{admin&&<button className="btn" onClick={()=>{
+      if(dirty&&!window.confirm('目前有尚未儲存的修改，是否放棄並開啟既有來源？'))return;
+      void run(async()=>{loadDoc(await api('/api/library/legacy-draft',jsonRequest({filename:item.filename})));await refresh();});
+    }}>建立／開啟切片草稿</button>}</div>)}</details>}
+    {doc?.editable && editor && <section className="chunk-editor" aria-label="切片編輯器"><h2>{doc.title} · 草稿修訂 {doc.draft_revision}</h2><p>索引狀態：{doc.index_status}；發布版本：{doc.published_version}</p>
+      {doc.warnings?.map((warning:string)=><p key={warning}>{warning}</p>)}
+      <div className="parallel-text"><div><h3>原始擷取</h3>{doc.blocks?.map((b:any)=><p key={b.id} dir="auto">{b.id} · 頁 {b.page??'—'} · {b.text}</p>)}</div><div><h3>切片草稿（{doc.draft.length}）</h3>{doc.draft.map((c:any,i:number)=><div key={c.id} className="chunk-card"><small>{c.id} · {c.refs.map((r:any)=>`${r.block_id}（頁 ${r.page??'—'}）`).join(', ')}</small><label>切片 {i+1} 內容<textarea value={c.content} dir="auto" onChange={e=>mutateChunks(doc.draft.map((v:any,j:number)=>i===j?{...v,content:e.target.value}:v))}/></label>
+        <button className="btn" disabled={i===doc.draft.length-1} onClick={()=>{const next=doc.draft[i+1];const merged={...c,content:c.content+'\n\n'+next.content,refs:[...c.refs,...next.refs]};mutateChunks([...doc.draft.slice(0,i),merged,...doc.draft.slice(i+2)]);}}>與下一片合併</button>
+        <button className="btn" disabled={c.content.trim().length<2} onClick={()=>{const parts=splitChunk(c,doc.blocks,crypto.randomUUID());if(parts)mutateChunks([...doc.draft.slice(0,i),...parts,...doc.draft.slice(i+1)]);}}>拆分為兩片</button>
       </div>)}</div></div>
-      <button className="btn" onClick={()=>save()}>儲存草稿</button><button className="btn" onClick={()=>save(true)}>還原自動切片</button>
-      {dirty&&<p>有尚未儲存的修改。請先儲存，再檢查差異與發布。</p>}
-      <button className="btn" disabled={dirty} onClick={async()=>{try{const d=await api(`/api/library/${doc.id}/diff`);setDiff(d.diff||'內容與目前發布版本相同。');setDiffHash(d.hash);}catch(e:any){setError(e.message);}}}>查看發布差異</button>
-      <label><input type="checkbox" checked={doc.shared} onChange={async e=>{try{setDoc(await api(`/api/library/${doc.id}/sharing`,jsonRequest({shared:e.target.checked,readers:doc.readers,revision:doc.draft_revision},'PATCH')));}catch(e:any){setError(e.message);}}}/>所有已登入使用者可讀取</label>
+      <div className="library-toolbar"><label>自動切片字數上限<input type="number" min="100" max="5000" value={chunkSize} onChange={e=>setChunkSize(Number(e.target.value))}/></label><button className="btn" disabled={!Number.isInteger(chunkSize)||chunkSize<100||chunkSize>5000} onClick={()=>save(true)}>依字數重新切片並儲存</button></div>
+      <button className="btn" onClick={()=>save()}>儲存草稿</button>
+      {dirty&&<p role="status">有尚未儲存的修改。請先儲存，再檢查差異與發布。</p>}
+      <button className="btn" disabled={dirty} onClick={()=>run(async()=>{const d=await api(`/api/library/${doc.id}/diff`);setDiff(d.diff||'內容與目前發布版本相同。');setDiffHash(d.hash);})}>查看發布差異</button>
+      {diff&&<pre className="whitespace-pre-wrap publication-diff" aria-label="發布差異">{diff}</pre>}
+      <label><input type="checkbox" disabled={dirty} checked={doc.shared} onChange={e=>{const shared=e.target.checked;void run(async()=>loadDoc(await api(`/api/library/${doc.id}/sharing`,jsonRequest({shared,readers:doc.readers,revision:doc.draft_revision},'PATCH'))));}}/>所有已登入使用者可讀取</label>
       {!doc.indexing_enabled&&<p>切片發布尚未啟用；草稿可以先儲存。</p>}
       {doc.indexing_enabled&&<p>發布後將更新搜尋索引，預計約 10～30 分鐘，實際依索引狀態而定。驗證完成前仍使用前一發布版本。</p>}
-      <button className="btn btn-primary" disabled={!doc.indexing_enabled||dirty||!diffHash} onClick={async()=>{try{const task=await api(`/api/library/${doc.id}/publish`,jsonRequest({revision:doc.draft_revision,reviewed_diff:diffHash}));setJob(task.id);}catch(e:any){setError(e.message);}}}>確認差異並發布</button>
-      <button className="btn" disabled={!doc.indexing_enabled||doc.published_version<2} onClick={async()=>{try{const task=await api(`/api/library/${doc.id}/rollback`,jsonRequest({revision:doc.draft_revision}));setJob(task.id);}catch(e:any){setError(e.message);}}}>回復前一發布版本</button>
-      <button className="btn" disabled={!doc.published_version} onClick={async()=>{try{setIndexed(await api(`/api/library/${doc.id}/indexed-chunks`));}catch(e:any){setError(e.message);}}}>核對實際索引內容</button>
+      {pending&&<p role="status">已有索引工作進行中，請至研究介面的工作紀錄查看進度。</p>}
+      <button className="btn btn-primary" disabled={!doc.indexing_enabled||dirty||!diffHash||pending} onClick={()=>run(async()=>{const task=await api(`/api/library/${doc.id}/publish`,jsonRequest({revision:doc.draft_revision,reviewed_diff:diffHash}));setJob(task.id);})}>確認差異並送出索引</button>
+      <button className="btn" disabled={!doc.indexing_enabled||doc.published_version<2||pending||dirty} onClick={()=>run(async()=>{const task=await api(`/api/library/${doc.id}/rollback`,jsonRequest({revision:doc.draft_revision}));setJob(task.id);})}>回復前一發布版本</button>
+      <button className="btn" disabled={!doc.published_version} onClick={()=>run(async()=>setIndexed(await api(`/api/library/${doc.id}/indexed-chunks`)))}>核對實際索引內容</button>
       {indexed&&<div><h3>實際索引 v{indexed.version} · {indexed.verified?'符合發布內容':'尚未符合發布內容'}</h3>{indexed.chunks.map((c:any)=><p key={c.id} dir="auto">{c.id} · {c.content}</p>)}</div>}
-      {diff&&<pre className="whitespace-pre-wrap">{diff}</pre>}
-    </div>}
-  </WorkspacePanel>;
+    </section>}
+    </fieldset>
+    {busy&&<p role="status">處理中……</p>}
+  </LibraryFrame>;
 }

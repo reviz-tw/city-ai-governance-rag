@@ -37,13 +37,13 @@ def validate(chunks, blocks):
                 raise ValueError('Source page does not match the original')
 
 
-def save(document_id, revision, chunks, reset=False):
+def save(document_id, revision, chunks, reset=False, chunk_size=1500):
     documents.get(document_id, edit=True)
     with store.session() as db:
         doc = db.scalar(select(store.Document).where(store.Document.id==document_id).with_for_update())
         if doc.draft_revision != revision:
             raise HTTPException(409, 'Draft changed; refresh before saving')
-        chunks = documents.baseline(doc.blocks) if reset else chunks
+        chunks = documents.baseline(doc.blocks, chunk_size) if reset else chunks
         validate(chunks, doc.blocks)
         doc.draft, doc.draft_revision = chunks, doc.draft_revision+1
         db.add(store.DraftRevision(id=f'{doc.id}:{doc.draft_revision}', document_id=doc.id,

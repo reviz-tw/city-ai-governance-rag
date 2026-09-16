@@ -1,3 +1,4 @@
+from fastapi import HTTPException
 import io
 import json
 from collections.abc import Mapping
@@ -97,6 +98,7 @@ def list_governance_documents() -> List[Dict[str, Any]]:
             })
     except Exception as e:
         logger.error(f"列出知識庫文件失敗: {e}")
+        raise HTTPException(503, "Historical document collection is temporarily unavailable") from None
     return documents
 
 

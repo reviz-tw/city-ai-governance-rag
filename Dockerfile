@@ -9,7 +9,7 @@ COPY web/package*.json ./
 RUN npm ci
 
 COPY web/ ./
-RUN npm run build
+RUN npm test && npm run build
 
 # ==========================================
 # Stage 2: Python Backend & Unified Server
@@ -39,10 +39,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend application source code
 COPY backend/app/ ./app/
 COPY backend/tests/ ./tests/
-RUN PYTHONPATH=/app pytest -q tests
 
 # Copy compiled React frontend bundle to backend static web_dist
 COPY --from=web-builder /build/web/dist ./app/web_dist
+RUN PYTHONPATH=/app pytest -q tests
 
 EXPOSE 8080
 

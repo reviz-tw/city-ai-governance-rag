@@ -41,3 +41,15 @@ test('Edited text splits without inventing precise source locations',()=>{
   const parts=splitChunk({id:'c1',content:'人工修正句子。保留原文來源。',refs},[{id:'p1',text:'原始文字'}],'c2');
   assert.deepEqual(parts[0].refs,refs);assert.deepEqual(parts[1].refs,refs);
 });
+
+const {apiList}=load('src/lib/api.ts');
+test('Document list reports expired login and invalid payloads instead of array errors',async(t)=>{
+  t.mock.method(global,'fetch',async()=>new Response(JSON.stringify({detail:'Sign in with Google to continue'}),{status:401}));
+  await assert.rejects(()=>apiList('/api/library'),/登入/);
+  global.fetch=async()=>new Response(JSON.stringify({detail:'Unexpected object'}));
+  await assert.rejects(()=>apiList('/api/library'),/文件清單格式錯誤/);
+  global.fetch=async()=>new Response(JSON.stringify([{id:'doc-1'}]));
+  assert.deepEqual(await apiList('/api/library'),[{id:'doc-1'}]);
+  global.fetch=async()=>new Response(JSON.stringify({detail:'Collection unavailable'}),{status:503});
+  await assert.rejects(()=>apiList('/api/library'),/Collection unavailable/);
+});

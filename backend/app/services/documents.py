@@ -137,6 +137,9 @@ def describe(doc, include_content=False):
                   metadata=doc.metadata_json, warnings=doc.extraction_warnings,
                   draft_revision=doc.draft_revision, published_version=doc.published_version,
                   index_status=doc.index_status, shared=doc.shared, editable=editable)
+    if doc.id.startswith("legacy-"):
+        from app.core.config import settings
+        result["legacy_filename"] = doc.original_key.removeprefix(f"gs://{settings.GCS_BUCKET_NAME}/documents/")
     if editable:
         from app.core.config import settings
         result.update(readers=doc.readers, indexing_enabled=settings.CHUNK_INDEX_ENABLED and bool(settings.CHUNK_DATA_STORE_ID))

@@ -52,3 +52,11 @@ Cloud Run runtime 需在指定資源範圍取得：上述兩個 secrets 的讀�
 2026-09-16 17:09:04 UTC（台北 2026-09-17）：`00044-tuj` 已接收 100% 流量；同一 revision 保留 candidate 標籤。`CHUNK_INDEX_ENABLED=true`，映像 digest 為 `sha256:1cd63085057b6bc4b538bcbdf85789756bbe3cb51da71639e5c806f8f85029bd`。舊 `00040-tod` 可作緊急服務回復，但其切片發布功能尚未啟用；內容版本回復應使用新版 Admin 的 rollback 流程。
 
 2026-09-17 追加切片邊界 Diff 驗收後，流量切至 `00047-pol`。此 revision 來自實作 commit `61584f6` 的自動建置，digest `sha256:5e227aff6d5fa4d4dcacbf72ba13d165e64c374e1a2b4f96a691fdb2c543c346`，與隔離建置快照一致。後續其他改版的 candidate 需由該改版獨立驗收。
+
+## Admin 與固定部署網址（2026-09-17）
+
+`/admin/` 使用與研究介面共用的 Google 登入、文件 ACL 與切片編輯器。Editor 可修改自己的文件；既有共用來源由 Admin 建立／開啟草稿。原 AI 標註工具保留在 `/admin/tools/`。可調整 100–5000 字自動切片上限，或手動修字、合併、拆分；儲存後需查看當次差異才可送出索引。
+
+Cloud Build 始終更新 `tdf-ocf / asia-east1 / city-rag-backend-dev`，使用每次 Build ID 作為 image tag 與 revision suffix。固定服務網址為 `https://city-rag-backend-dev-wvswpuk2tq-de.a.run.app`；candidate 是同一服務的固定測試別名。建置跑前後端測試後部署零流量 candidate，驗證健康、Admin SPA、API 登入保護及服務網址，再將本次 revision 切至 100%。若已有更新的部署或服務網址不符，就停止 promotion。
+
+`APP_ORIGIN` 與新 Cloud Tasks 工作改用固定服務網址。`WORKER_LEGACY_ORIGINS` 僅相容已排入 candidate 別名的舊工作；仍嚴格驗證 Google token 簽章、audience 及原 worker service account。清理排程的 URI 與 OIDC audience 亦使用固定服務網址。

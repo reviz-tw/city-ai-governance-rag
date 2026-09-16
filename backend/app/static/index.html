@@ -177,7 +177,7 @@
             </div>
 
             <label><input type="checkbox" id="document-rights"> 已確認可處理、翻譯並依設定分享此文件</label>
-            <a href="/?admin=1">開啟文件庫：編輯、檢查差異與發布</a>
+            <a href="/admin/">開啟文件庫：編輯、檢查差異與發布</a>
             <!-- Commit Button -->
             <button onclick="commitToIndex()" id="btn-commit-index" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 px-4 rounded-lg text-sm flex items-center justify-center space-x-2 transition shadow-sm">
               <i data-lucide="cloud-upload" class="w-4 h-4"></i>
@@ -632,13 +632,15 @@
       try {
         const resp = await fetch('/api/documents/list');
         const docs = await resp.json();
-        allDocuments = docs || [];
+        if (!resp.ok) throw new Error(resp.status === 401 ? '請先登入：開啟文件庫管理後台完成 Google 登入。' : (docs.detail || `載入失敗 (${resp.status})`));
+        if (!Array.isArray(docs)) throw new Error('文件清單格式錯誤');
+        allDocuments = docs;
         renderDocumentsTable(allDocuments);
       } catch (err) {
         tbody.innerHTML = `
           <tr>
             <td colspan="7" class="py-8 text-center text-rose-500">
-              載入失敗: ${escapeHTML(err.message)}
+              載入失敗: ${escapeHTML(err.message)} <a href="/admin/" class="underline">開啟文件庫管理後台</a>
             </td>
           </tr>
         `;

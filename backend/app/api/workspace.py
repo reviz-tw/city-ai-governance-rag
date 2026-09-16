@@ -14,6 +14,28 @@ router = APIRouter(prefix='/api')
 def library():
     return documents.list_documents()
 
+@router.get('/library/legacy')
+def legacy_library():
+    require_user()
+    from app.pipelines.vertex_search import list_governance_documents
+    return list_governance_documents()
+
+class LegacyDraftRequest(BaseModel):
+    filename: str = Field(min_length=1, max_length=1024)
+
+@router.post('/library/legacy-draft')
+def legacy_draft(body: LegacyDraftRequest):
+    user = require_editor()
+    # The historical shared collection belongs to the workspace, not an individual editor.
+    if not user.admin:
+        raise HTTPException(403, 'Only an administrator can manage the historical collection')
+    from app.pipelines.vertex_search import list_governance_documents
+    item = next((item for item in list_governance_documents() if item['filename'] == body.filename), None)
+    if item is None:
+        raise HTTPException(404, 'Document not found')
+    identifier = documents.register_legacy(dict(link=item['gcs_uri'], title=item['filename'], metadata=item))
+    return documents.describe(documents.get(identifier, edit=True), include_content=True)
+
 @router.post('/library')
 async def upload(file: UploadFile = File(...), language: str = Form(''), city: str = Form(''),
                  cleaned_text: str | None = Form(None), rights_confirmed: bool = Form(False)):
@@ -125,12 +147,13 @@ class ChunkDraftRequest(BaseModel):
     revision: int
     chunks: list[dict] = Field(default_factory=list, max_length=1000)
     reset: bool = False
+    chunk_size: int = Field(default=1500, ge=100, le=5000)
 
 @router.post('/library/{document_id}/draft')
 def save_draft(document_id: str, body: ChunkDraftRequest):
     from app.services import chunks
     try:
-        return chunks.save(document_id, body.revision, body.chunks, body.reset)
+        return chunks.save(document_id, body.revision, body.chunks, body.reset, body.chunk_size)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
 

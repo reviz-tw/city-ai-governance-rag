@@ -16,6 +16,7 @@ import {WorkspacePanel} from './components/WorkspacePanel';
 import {researchCopy} from './lib/research-copy';
 
 export default function App() {
+  const adminMode = /^\/admin\/?$/.test(location.pathname);
   const [lang, setLang] = useState(() => normalizeInterfaceLanguage(new URLSearchParams(location.search).get('lang') || localStorage.getItem('interface_language')));
   const [user, setUser] = useState<any>(null);
   const [checking, setChecking] = useState(true);
@@ -26,7 +27,7 @@ export default function App() {
   const [city, setCity] = useState('');
   const [sources, setSources] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [panel, setPanel] = useState(new URLSearchParams(location.search).has('admin') ? 'library' : '');
+  const [panel, setPanel] = useState(adminMode || new URLSearchParams(location.search).has('admin') ? 'library' : '');
   const [sourceId, setSourceId] = useState('');
   const t = STRINGS[lang];
   const [scopeOpen, setScopeOpen] = useState(false);
@@ -70,11 +71,11 @@ export default function App() {
       }}/>
     {authError && <p className="app-alert" role="alert">{authError}</p>}
     <div className="research-workspace">
-      <aside className="research-sidebar" aria-label={researchCopy(lang).scopeToggle}>{sidebar}</aside>
-      <ChatView t={t} lang={lang} messages={messages} loading={loading} onSendMessage={send} onClearHistory={clear} onOpenSource={setSourceId}/>
+      {!adminMode && <aside className="research-sidebar" aria-label={researchCopy(lang).scopeToggle}>{sidebar}</aside>}
+      {!adminMode && <ChatView t={t} lang={lang} messages={messages} loading={loading} onSendMessage={send} onClearHistory={clear} onOpenSource={setSourceId}/>}
       {scopeOpen && <WorkspacePanel title={researchCopy(lang).scopeToggle} className="scope-panel" onClose={() => setScopeOpen(false)}>{sidebar}</WorkspacePanel>}
       {['chart','pdf','pptx'].includes(panel) && <ArtifactPanel kind={panel} messages={messages} onClose={()=>setPanel('')} key={panel}/>}
-      {panel === 'library' && <Library editor={user.editor} onClose={()=>setPanel('')} onRead={setSourceId}/>}
+      {(panel === 'library' || adminMode) && <Library admin={user.admin} standalone={adminMode} editor={user.editor} onClose={()=>adminMode ? location.assign('/') : setPanel('')} onRead={setSourceId}/>}
       {panel === 'tasks' && <TaskHistory onClose={()=>setPanel('')}/>}
       {panel === 'mcp' && <MCPAccess onClose={()=>setPanel('')}/>}
       {sourceId && <SourceReader id={sourceId} language={[...messages].reverse().find(m=>m.response_language)?.response_language || 'zh-TW'} onClose={()=>setSourceId('')} key={sourceId}/>}

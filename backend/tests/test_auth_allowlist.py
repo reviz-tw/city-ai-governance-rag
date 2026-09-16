@@ -67,10 +67,10 @@ def test_worker_endpoint_requires_exact_identity(monkeypatch):
     from app.main import verify_worker
     monkeypatch.setattr(settings,'WORKER_SERVICE_ACCOUNT','worker@example.test')
     request=Request({'type':'http','headers':[(b'authorization',b'Bearer synthetic')]})
-    monkeypatch.setattr(auth.id_token,'verify_oauth2_token',lambda *args: {'email':'other@example.test','email_verified':True})
+    monkeypatch.setattr(auth.id_token,'verify_oauth2_token',lambda *args: {'email':'other@example.test','email_verified':True,'aud':settings.APP_ORIGIN})
     with pytest.raises(HTTPException):
         verify_worker(request)
-    monkeypatch.setattr(auth.id_token,'verify_oauth2_token',lambda *args: {'email':'worker@example.test','email_verified':True})
+    monkeypatch.setattr(auth.id_token,'verify_oauth2_token',lambda *args: {'email':'worker@example.test','email_verified':True,'aud':settings.APP_ORIGIN})
     verify_worker(request)
 
 def test_mcp_security_accepts_configured_hosts_and_rejects_other_run_apps():
