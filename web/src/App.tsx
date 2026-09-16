@@ -1,278 +1,82 @@
-import { useState, useEffect } from 'react';
-import { Header } from './components/Header';
-import { TopicDrawer } from './components/TopicDrawer';
-import { ChatView } from './components/ChatView';
-import { Topic, ChatMessage, GovernanceDocument, Citation, LanguageCode } from './types';
-import { STRINGS, INITIAL_TOPICS, getLocalizedTopic } from './i18n';
-import { Layers, FlaskConical } from 'lucide-react';
+import {useEffect, useState} from 'react';
+import {Header} from './components/Header';
+import {ChatView} from './components/ChatView';
+import {Login} from './components/Login';
+import {ArtifactPanel,TaskHistory} from './components/ArtifactPanel';
+import {SourceReader} from './components/SourceReader';
+import {Library} from './components/Library';
+import {MCPAccess} from './components/MCPAccess';
+import {ChatMessage} from './types';
+import {STRINGS} from './i18n';
+import {normalizeInterfaceLanguage, CONTENT_LANGUAGES} from './lib/languages';
+import {api} from './lib/api';
+import {readSSE} from './lib/sse';
+import {workspaceLabels} from './lib/workspace-labels';
 
 export default function App() {
-  const [lang, setLang] = useState<LanguageCode>('zh');
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<'topics' | 'analysis'>('topics');
-  const [topics, setTopics] = useState<Topic[]>(INITIAL_TOPICS);
-  const [selectedTopicId, setSelectedTopicId] = useState<string>(INITIAL_TOPICS[0].id);
-  const [documents, setDocuments] = useState<GovernanceDocument[]>([]);
-  const [messagesByTopic, setMessagesByTopic] = useState<Record<string, ChatMessage[]>>({});
+  const [lang, setLang] = useState(() => normalizeInterfaceLanguage(new URLSearchParams(location.search).get('lang') || localStorage.getItem('interface_language')));
+  const [user, setUser] = useState<any>(null);
+  const [checking, setChecking] = useState(true);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [contextBoundary, setContextBoundary] = useState(0);
+  const [summary, setSummary] = useState('');
+  const [contextCity, setContextCity] = useState<string|null>(null);
+  const [city, setCity] = useState('');
+  const [sources, setSources] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-
-  const t = STRINGS[lang] || STRINGS.zh;
-
-  // 1. Fetch Topics & Document Metadata on Mount
-  useEffect(() => {
-    fetch('/api/topics')
-      .then((res) => res.json())
-      .then((data: Topic[]) => {
-        if (Array.isArray(data) && data.length > 0) {
-          // Merge API topics with styling tokens from INITIAL_TOPICS
-          const merged = data.map((apiTopic) => {
-            const fallback = INITIAL_TOPICS.find((it) => it.id === apiTopic.id);
-            return {
-              ...fallback,
-              ...apiTopic,
-              icon: fallback?.icon || 'shield',
-              bg: fallback?.bg || 'var(--color-neutral-100)',
-              border: fallback?.border || 'var(--color-neutral-200)',
-              iconBg: fallback?.iconBg || 'var(--color-neutral-700)',
-              iconFg: fallback?.iconFg || '#fff',
-            };
-          });
-          setTopics(merged);
-          setSelectedTopicId(merged[0].id);
-        }
-      })
-      .catch((err) => console.log('Using built-in topics fallback:', err));
-
-    fetch('/api/documents/list')
-      .then((res) => res.json())
-      .then((docs: GovernanceDocument[]) => {
-        if (Array.isArray(docs)) setDocuments(docs);
-      })
-      .catch((err) => console.log('Failed to fetch doc list:', err));
-  }, []);
-
-  const rawTopic = topics.find((tp) => tp.id === selectedTopicId) || topics[0];
-  const currentTopic = getLocalizedTopic(rawTopic, lang);
-  const localizedTopics = topics.map((tp) => getLocalizedTopic(tp, lang));
-  const currentMessages = messagesByTopic[selectedTopicId] || [];
-
-  const handleSelectTopic = (id: string) => {
-    setSelectedTopicId(id);
-    setDrawerOpen(false);
-  };
-
-  const handleOpenTopics = () => {
-    setDrawerTab('topics');
-    setDrawerOpen(true);
-  };
-
-  const handleOpenAnalysis = () => {
-    setDrawerTab('analysis');
-    setDrawerOpen(true);
-  };
-
-  const handleCloseDrawer = () => {
-    setDrawerOpen(false);
-  };
-
-  const handleLangChange = (newLang: LanguageCode) => {
-    setLang(newLang);
-  };
-
-  const handleClearHistory = () => {
-    setMessagesByTopic((prev) => ({
-      ...prev,
-      [selectedTopicId]: [],
-    }));
-  };
-
-  // 2. Handle Send Message with SSE Streaming
-  const handleSendMessage = async (text: string) => {
-    if (!text.trim() || loading) return;
-
-    const userMsgId = 'u-' + Date.now();
-    const assistantMsgId = 'a-' + Date.now();
-    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    const userMsg: ChatMessage = {
-      id: userMsgId,
-      role: 'user',
-      content: text,
-      timestamp: nowTime,
-    };
-
-    const assistantMsg: ChatMessage = {
-      id: assistantMsgId,
-      role: 'assistant',
-      content: '',
-      citations: [],
-      timestamp: nowTime,
-      isStreaming: true,
-    };
-
-    // Append user & empty assistant message
-    setMessagesByTopic((prev) => ({
-      ...prev,
-      [selectedTopicId]: [...(prev[selectedTopicId] || []), userMsg, assistantMsg],
-    }));
-
+  const [panel, setPanel] = useState(new URLSearchParams(location.search).has('admin') ? 'library' : '');
+  const [sourceId, setSourceId] = useState('');
+  const t = STRINGS[lang];
+  const labels=workspaceLabels(lang);
+  useEffect(() => {api('/api/auth/me').then(setUser).catch(() => {}).finally(() => setChecking(false));}, []);
+  useEffect(() => {localStorage.setItem('interface_language', lang); document.documentElement.lang = lang === 'zh' ? 'zh-TW' : lang; document.documentElement.dir = 'ltr';}, [lang]);
+  const clear = () => {setMessages([]); setContextBoundary(0); setSummary(''); setContextCity(null); setCity(''); setSources([]);};
+  const send = async (text: string) => {
+    if (loading) return;
+    const now = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    const id = crypto.randomUUID();
+    const history = messages.slice(contextBoundary).slice(-6).map(m => ({id:m.id, role:m.role, content:m.content.slice(0,12000), source_ids:m.citations?.map(c=>c.document_id).filter(Boolean) || [], response_language:m.response_language}));
+    setMessages(prev => [...prev, {id:crypto.randomUUID(), role:'user', content:text, timestamp:now}, {id, role:'assistant', content:'', timestamp:now, isStreaming:true}]);
     setLoading(true);
-
+    const update = (changes: Partial<ChatMessage>) => setMessages(prev => prev.map(m => m.id === id ? {...m,...changes} : m));
+    let content = '';
     try {
-      const response = await fetch('/api/chat/stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: text,
-          topic_id: selectedTopicId,
-          city: '台北',
-          language: lang === 'zh' ? 'zh-TW' : lang,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      const response = await fetch('/api/chat/stream', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:text, city:city || null, response_language:'auto', interface_language:lang === 'zh' ? 'zh-TW':lang, source_languages:sources, research_context:{history, summary, city:contextCity}})});
+      if (!response.ok || !response.body) throw new Error(`Request failed (${response.status})`);
+      for await (const event of readSSE(response.body)) {
+        if (event.type === 'sources') {
+          update({citations:event.sources, response_language:event.response_language});
+          setSummary(event.context_summary || ''); setContextCity(event.context_city || null);
+        } else if (event.type === 'chunk') {content += event.text; update({content});}
+        else if (event.type === 'error') {update({error:event.message}); if (!content) update({content:event.message});}
       }
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let accumulatedText = '';
-      let collectedCitations: Citation[] = [];
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const rawChunk = decoder.decode(value, { stream: true });
-          const lines = rawChunk.split('\n');
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const eventData = JSON.parse(line.substring(6));
-                if (eventData.type === 'sources') {
-                  collectedCitations = eventData.sources || [];
-                  setMessagesByTopic((prev) => {
-                    const topicMsgs = [...(prev[selectedTopicId] || [])];
-                    const target = topicMsgs.find((m) => m.id === assistantMsgId);
-                    if (target) target.citations = collectedCitations;
-                    return { ...prev, [selectedTopicId]: topicMsgs };
-                  });
-                } else if (eventData.type === 'chunk') {
-                  accumulatedText += eventData.text || '';
-                  setMessagesByTopic((prev) => {
-                    const topicMsgs = [...(prev[selectedTopicId] || [])];
-                    const target = topicMsgs.find((m) => m.id === assistantMsgId);
-                    if (target) target.content = accumulatedText;
-                    return { ...prev, [selectedTopicId]: topicMsgs };
-                  });
-                } else if (eventData.type === 'done') {
-                  // Completed
-                }
-              } catch {
-                // Ignore partial JSON parse errors
-              }
-            }
-          }
-        }
-      }
-    } catch (err: any) {
-      console.error('Streaming error:', err);
-      setMessagesByTopic((prev) => {
-        const topicMsgs = [...(prev[selectedTopicId] || [])];
-        const target = topicMsgs.find((m) => m.id === assistantMsgId);
-        if (target) {
-          target.content =
-            target.content ||
-            `連線檢索時發生提示：${err.message || '請稍後重試'}。您可以點選建議問題重新發問。`;
-        }
-        return { ...prev, [selectedTopicId]: topicMsgs };
-      });
-    } finally {
-      setLoading(false);
-      setMessagesByTopic((prev) => {
-        const topicMsgs = [...(prev[selectedTopicId] || [])];
-        const target = topicMsgs.find((m) => m.id === assistantMsgId);
-        if (target) target.isStreaming = false;
-        return { ...prev, [selectedTopicId]: topicMsgs };
-      });
-    }
+    } catch (e: any) {update({content:content || e.message, error:e.message});}
+    finally {update({isStreaming:false}); setLoading(false);}
   };
-
-  return (
-    <div className="flex flex-col h-screen min-h-[640px] bg-[var(--color-bg)] text-[var(--color-text)] font-body overflow-hidden">
-      {/* Top Navigation Bar */}
-      <Header
-        t={t}
-        lang={lang}
-        onLangChange={handleLangChange}
-        documentCount={documents.length || 22}
-      />
-
-      {/* Main Body Workspace */}
-      <div className="flex-1 flex min-h-0 relative">
-        {/* Left Action Rail (84px) */}
-        <nav
-          aria-label="快捷側欄導航"
-          className="flex-none w-[84px] flex flex-col items-center gap-2 py-4 px-2 border-r border-[var(--color-neutral-200)] bg-[var(--color-neutral-100)] select-none z-10"
-        >
-          <button
-            type="button"
-            onClick={handleOpenTopics}
-            className={`w-full border-none rounded-[var(--radius-lg)] py-2.5 px-1 flex flex-col items-center gap-1 cursor-pointer font-body transition-colors ${
-              drawerOpen && drawerTab === 'topics'
-                ? 'bg-[var(--color-accent-100)] text-[var(--color-accent-700)] font-bold shadow-2xs'
-                : 'bg-transparent text-[var(--color-neutral-700)] hover:bg-[var(--color-neutral-200)]'
-            }`}
-            title={t.railTopics}
-          >
-            <Layers className="icn" />
-            <span className="text-[10.5px] leading-tight text-center font-medium">
-              {t.railTopics}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleOpenAnalysis}
-            className={`w-full border-none rounded-[var(--radius-lg)] py-2.5 px-1 flex flex-col items-center gap-1 cursor-pointer font-body transition-colors ${
-              drawerOpen && drawerTab === 'analysis'
-                ? 'bg-[var(--color-accent-100)] text-[var(--color-accent-700)] font-bold shadow-2xs'
-                : 'bg-transparent text-[var(--color-neutral-700)] hover:bg-[var(--color-neutral-200)]'
-            }`}
-            title={t.railAnalysis}
-          >
-            <FlaskConical className="icn" />
-            <span className="text-[10.5px] leading-tight text-center font-medium">
-              {t.railAnalysis}
-            </span>
-          </button>
-        </nav>
-
-        {/* Slide-out Drawer */}
-        <TopicDrawer
-          t={t}
-          topics={localizedTopics}
-          selectedTopicId={selectedTopicId}
-          onSelectTopic={handleSelectTopic}
-          isOpen={drawerOpen}
-          activeTab={drawerTab}
-          onTabChange={setDrawerTab}
-          onClose={handleCloseDrawer}
-        />
-
-        {/* Main Chat Workspace */}
-        <ChatView
-          t={t}
-          topic={currentTopic}
-          messages={currentMessages}
-          loading={loading}
-          onSendMessage={handleSendMessage}
-          onClearHistory={handleClearHistory}
-          onOpenTopics={handleOpenTopics}
-        />
-      </div>
+  if (checking) return <p className="p-8">Loading…</p>;
+  if (!user) return <Login onLogin={setUser}/>;
+  return <div className="flex flex-col h-screen min-h-[640px] bg-[var(--color-bg)] text-[var(--color-text)] font-body overflow-hidden">
+    <Header t={t} lang={lang} onLangChange={setLang}/>
+    <div className="research-toolbar">
+      <label>{labels.city}<input value={city} disabled={loading} onChange={e => {setCity(e.target.value); setContextCity(null); setSummary(''); setContextBoundary(messages.length);}} placeholder={labels.allCities}/></label>
+      <label>{labels.sources}<select multiple value={sources} onChange={e => setSources(Array.from(e.target.selectedOptions, o=>o.value))}>{Object.entries(CONTENT_LANGUAGES).map(([code,name])=><option key={code} value={code}>{name}</option>)}</select></label>
+      <button className="btn" onClick={() => setSources([])}>{labels.allSources}</button>
+      <button className="btn" disabled={!messages.some(m=>!m.isStreaming&&!m.error&&m.citations?.some(c=>c.document_id))} onClick={()=>setPanel('chart')}>{labels.chart}</button>
+      <button className="btn" disabled={!messages.some(m=>!m.isStreaming&&!m.error&&m.citations?.some(c=>c.document_id))} onClick={()=>setPanel('pdf')}>{labels.report}</button>
+      <button className="btn" disabled={!messages.some(m=>!m.isStreaming&&!m.error&&m.citations?.some(c=>c.document_id))} onClick={()=>setPanel('pptx')}>{labels.slides}</button>
+      <button className="btn" onClick={()=>setPanel('library')}>{labels.library}</button>
+      <button className="btn" onClick={()=>setPanel('tasks')}>{labels.tasks}</button>
+      <button className="btn" onClick={()=>setPanel('mcp')}>MCP</button>
+      <small title={user.email}>{user.email}</small>
+      <button className="btn" onClick={async()=>{await api('/api/auth/logout',{method:'POST'}); clear();setUser(null);}}>{labels.logout}</button>
     </div>
-  );
+    <div className="flex-1 flex min-h-0 relative">
+      <ChatView t={t} messages={messages} loading={loading} onSendMessage={send} onClearHistory={clear} onOpenSource={setSourceId}/>
+      {['chart','pdf','pptx'].includes(panel) && <ArtifactPanel kind={panel} messages={messages} onClose={()=>setPanel('')} key={panel}/>}
+      {panel === 'library' && <Library editor={user.editor} onClose={()=>setPanel('')} onRead={setSourceId}/>}
+      {panel === 'tasks' && <TaskHistory onClose={()=>setPanel('')}/>}
+      {panel === 'mcp' && <MCPAccess onClose={()=>setPanel('')}/>}
+      {sourceId && <SourceReader id={sourceId} language={[...messages].reverse().find(m=>m.response_language)?.response_language || 'zh-TW'} onClose={()=>setSourceId('')} key={sourceId}/>}
+    </div>
+  </div>;
 }

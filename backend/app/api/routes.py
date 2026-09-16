@@ -1,7 +1,7 @@
 import io
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Body
+from fastapi import Depends, APIRouter, UploadFile, File, Form, HTTPException, Body
 from fastapi.responses import StreamingResponse
 from pypdf import PdfReader
 import docx
@@ -12,7 +12,7 @@ from app.models.schema import (
     DocumentCleanAndTagResponse,
     IndexDocumentResponse,
     ChunkPreview,
-    ChatStreamRequest
+    ChatStreamRequest, RAGQueryRequest
 )
 from app.pipelines.cleaner import clean_and_annotate_document, preview_chunks
 from app.pipelines.vertex_search import (
@@ -23,6 +23,7 @@ from app.pipelines.vertex_search import (
 )
 
 
+from app.services.auth import require_editor
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["Governance RAG & Ops"])
@@ -41,97 +42,55 @@ def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
     else:
         return file_bytes.decode("utf-8", errors="ignore")
 
-@router.post("/documents/clean-and-tag", response_model=DocumentCleanAndTagResponse)
+@router.post("/documents/clean-and-tag", dependencies=[Depends(require_editor)], response_model=DocumentCleanAndTagResponse)
 async def api_clean_and_tag(request: DocumentCleanAndTagRequest):
     """使用 LLM 預清理文件並自動標註 Metadata"""
     if not request.raw_text.strip():
         raise HTTPException(status_code=400, detail="文件內容不能為空。")
     return clean_and_annotate_document(request.raw_text, request.filename)
 
-@router.post("/documents/preview-chunks", response_model=List[ChunkPreview])
+@router.post("/documents/preview-chunks", dependencies=[Depends(require_editor)], response_model=List[ChunkPreview])
 async def api_preview_chunks(
     text: str = Form(...),
-    chunk_size: int = Form(500),
-    chunk_overlap: int = Form(80)
+    chunk_size: int = Form(1500),
+    chunk_overlap: int = Form(0)
 ):
     """預覽切片結果與長度分佈"""
-    return preview_chunks(text, {}, chunk_size, chunk_overlap)
+    from app.services.documents import baseline
+    if len(text)>100000 or not 100<=chunk_size<=5000 or chunk_overlap!=0:
+        raise HTTPException(422,'Draft preview requires a valid size and no overlap')
+    return [ChunkPreview(chunk_index=i+1,content=c['content'],token_count=len(c['content'].encode()),
+        char_count=len(c['content']),metadata={}) for i,c in enumerate(baseline([{'id':'preview','text':text,'page':None}],chunk_size))]
 
-@router.post("/documents/upload-and-index", response_model=IndexDocumentResponse)
+@router.post("/documents/upload-and-index", dependencies=[Depends(require_editor)], response_model=IndexDocumentResponse)
 async def api_upload_and_index(
-    file: UploadFile = File(...),
-    city: Optional[str] = Form(None),
-    country: Optional[str] = Form(None),
-    policy_domain: Optional[str] = Form(None),
-    document_type: Optional[str] = Form(None),
-    language: Optional[str] = Form(None),
-    publication_year: Optional[int] = Form(None),
-    auto_ai_tag: bool = Form(True)
+    file: UploadFile = File(...), city: str = Form(''), country: str = Form(''),
+    policy_domain: str = Form(''), document_type: str = Form(''), language: str = Form(''),
+    publication_year: Optional[int] = Form(None), auto_ai_tag: bool = Form(False),
+    cleaned_text: Optional[str] = Form(None), rights_confirmed: bool = Form(False)
 ):
-    """上傳文件至 GCS 並透過 Vertex AI Search 進行自動建構與索引"""
-    try:
-        content_bytes = await file.read()
-        extracted_text = extract_text_from_file(content_bytes, file.filename)
-        
-        if not extracted_text.strip():
-            raise HTTPException(status_code=400, detail="未能從檔案中讀取有效文字。")
-            
-        metadata_dict = {
-            "city": city or "全球",
-            "country": country or "",
-            "policy_domain": policy_domain or "公共治理與智慧城市",
-            "document_type": document_type or "政策白皮書",
-            "language": language or "zh-TW",
-            "publication_year": str(publication_year or 2025)
-        }
-        
-        if auto_ai_tag:
-            ai_res = clean_and_annotate_document(extracted_text, file.filename)
-            meta = ai_res.suggested_metadata
-            metadata_dict.update({
-                "city": city or meta.city,
-                "country": country or meta.country,
-                "policy_domain": policy_domain or meta.policy_domain,
-                "document_type": document_type or meta.document_type,
-                "language": language or meta.language,
-                "publication_year": str(publication_year or meta.publication_year),
-                "ai_summary": meta.summary
-            })
-            
-        # Upload original bytes to GCS bucket for Vertex AI Search ingestion
-        gcs_uri = upload_document_to_gcs(
-            file_bytes=content_bytes,
-            file_name=file.filename,
-            content_type=file.content_type or "application/pdf",
-            metadata=metadata_dict
-        )
-        
-        return IndexDocumentResponse(
-            success=True,
-            document_id=file.filename,
-            total_chunks=1,
-            message=f"文件《{file.filename}》已成功上傳至 Cloud Storage ({gcs_uri}) 並同步至 Vertex AI Search 知識庫！"
-        )
-    except Exception as e:
-        logger.error(f"檔案上傳與索引失敗: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """Legacy Admin transport: preserve the original and create the same reviewable draft as /library."""
+    from app.services import documents
+    if not rights_confirmed:
+        raise HTTPException(422, 'Confirm document processing and translation rights')
+    data = await file.read(20*1024*1024+1)
+    metadata = dict(city=city,country=country,policy_domain=policy_domain,document_type=document_type,
+                    language=language,publication_year=publication_year)
+    if auto_ai_tag:
+        text=extract_text_from_file(data,file.filename)
+        suggested=clean_and_annotate_document(text,file.filename)
+        metadata={**suggested.suggested_metadata.model_dump(),**{k:v for k,v in metadata.items() if v}}
+        cleaned_text=cleaned_text if cleaned_text is not None else suggested.cleaned_text
+    doc=documents.create(data,file.filename or 'document.txt',file.content_type or 'application/octet-stream',metadata,cleaned_text)
+    value=documents.get(doc['id'])
+    return IndexDocumentResponse(success=True,document_id=doc['id'],total_chunks=len(value.draft),
+        message='原始文件與切片草稿已儲存。請到文件庫檢查差異並發布；搜尋索引尚未更新。')
 
 @router.post("/rag/query")
-async def api_query_rag(
-    query: str = Form(...),
-    city: Optional[str] = Form(None),
-    language: Optional[str] = Form(None)
-):
-    """執行 Vertex AI Search 治理檢索與問答"""
-    try:
-        return query_city_governance_rag_vertex(
-            query=query,
-            city_filter=city,
-            language_filter=language
-        )
-    except Exception as e:
-        logger.error(f"Vertex AI RAG 查詢失敗: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+def api_query_rag(request: RAGQueryRequest):
+    return query_city_governance_rag_vertex(query=request.query, city_filter=request.city,
+        response_language=request.response_language, interface_language=request.interface_language,
+        source_languages=request.source_languages, research_context=request.research_context)
 
 @router.get("/documents/list")
 async def api_list_documents():
@@ -143,7 +102,7 @@ async def api_list_documents():
         logger.error(f"獲取文件清單失敗: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/documents/sync-vertex")
+@router.post("/documents/sync-vertex", dependencies=[Depends(require_editor)])
 async def api_sync_vertex():
     """手動觸發 Vertex AI Search 對 GCS 儲存桶進行全量/增量掃描與索引建構"""
     try:
@@ -331,7 +290,10 @@ async def api_chat_stream(request: ChatStreamRequest):
             stream_city_governance_rag_vertex(
                 query=request.query,
                 city_filter=request.city,
-                language_filter=request.language
+                response_language=request.response_language,
+                interface_language=request.interface_language,
+                source_languages=request.source_languages,
+                research_context=request.research_context
             ),
             media_type="text/event-stream"
         )
@@ -342,4 +304,3 @@ async def api_chat_stream(request: ChatStreamRequest):
 @router.get("/health")
 async def health_check():
     return {"status": "ok", "service": "City AI Governance Vertex AI Search & MCP Hub"}
-

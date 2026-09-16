@@ -1,0 +1,7 @@
+# Runs the full image build and tests without pushing an image or deploying.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ['build', '-t', 'city-governance-validation', '-f', 'Dockerfile', '.']
+timeout: 1800s
+options:
+  logging: CLOUD_LOGGING_ONLY

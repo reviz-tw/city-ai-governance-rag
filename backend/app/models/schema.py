@@ -1,5 +1,7 @@
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, AliasChoices, field_validator
+from app.services.languages import normalize_language, source_languages as normalize_sources
+from app.services.context import ResearchContext
 
 class GovernanceMetadata(BaseModel):
     title: str = Field(..., description="文件標題")
@@ -15,7 +17,7 @@ class GovernanceMetadata(BaseModel):
         description="文件類型 (如: 市政府自治法規, 政策白皮書, 框架指引, 顧問評估報告, 標竿案例)"
     )
     language: str = Field("zh-TW", description="原文語言代碼 (如: zh-TW, en, ja, ko, es)")
-    publication_year: Optional[int] = Field(2025, description="發布年份")
+    publication_year: Optional[int] = Field(None, description="發布年份；未記載則為 null")
     source_url: Optional[str] = Field(None, description="原始來源或發布機關網址")
     tags: List[str] = Field(default_factory=list, description="標籤關鍵字")
 
@@ -27,7 +29,7 @@ class ChunkPreview(BaseModel):
     metadata: Dict[str, Any]
 
 class DocumentCleanAndTagRequest(BaseModel):
-    raw_text: str = Field(..., description="原始文字內容")
+    raw_text: str = Field(..., max_length=15000, description="原始文字內容；超過上限請分批清理")
     filename: Optional[str] = Field(None, description="檔案名稱")
 
 class DocumentCleanAndTagResponse(BaseModel):
@@ -48,13 +50,30 @@ class IndexDocumentResponse(BaseModel):
     total_chunks: int
     message: str
 
-class RAGQueryRequest(BaseModel):
-    query: str = Field(..., description="查詢問題或分析需求")
-    cities: Optional[List[str]] = Field(None, description="指定城市過濾條件")
-    policy_domains: Optional[List[str]] = Field(None, description="指定政策領域過濾條件")
-    languages: Optional[List[str]] = Field(None, description="指定語言過濾條件")
-    top_k: int = Field(5, description="檢索片段數量")
-    response_language: Optional[str] = Field("zh-TW", description="回答使用的目標語言")
+class LanguageRequest(BaseModel):
+    response_language: str = Field("auto", validation_alias=AliasChoices("response_language", "language"))
+    interface_language: str | None = None
+    source_languages: List[str] = Field(default_factory=list, max_length=10)
+    research_context: ResearchContext | None = None
+
+    @field_validator("response_language", mode="before")
+    @classmethod
+    def validate_response(cls, value):
+        return normalize_language(value, auto=True)
+
+    @field_validator("interface_language")
+    @classmethod
+    def validate_interface(cls, value):
+        return normalize_language(value) if value else None
+
+    @field_validator("source_languages")
+    @classmethod
+    def validate_sources(cls, value):
+        return normalize_sources(value)
+
+class RAGQueryRequest(LanguageRequest):
+    query: str = Field(min_length=1, max_length=8000)
+    city: str | None = Field(None, max_length=100)
 
 class RetrievedSource(BaseModel):
     content: str
@@ -67,9 +86,5 @@ class RAGQueryResponse(BaseModel):
     sources: List[RetrievedSource]
     model_used: str
 
-class ChatStreamRequest(BaseModel):
-    query: str = Field(..., description="使用者問題")
-    topic_id: Optional[str] = Field(None, description="主題焦點 ID")
-    city: Optional[str] = Field("台北", description="城市篩選")
-    language: Optional[str] = Field("zh-TW", description="語言代碼")
-
+class ChatStreamRequest(RAGQueryRequest):
+    topic_id: Optional[str] = Field(None, description="Deprecated; no implicit research scope")

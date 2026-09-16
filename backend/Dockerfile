@@ -6,7 +6,7 @@ FROM node:20-alpine AS web-builder
 WORKDIR /build/web
 
 COPY web/package*.json ./
-RUN npm install
+RUN npm ci
 
 COPY web/ ./
 RUN npm run build
@@ -27,6 +27,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     curl \
+    fonts-dejavu-core \
+    fonts-wqy-zenhei \
+    libreoffice-impress \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy and install python dependencies
@@ -35,6 +38,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend application source code
 COPY backend/app/ ./app/
+COPY backend/tests/ ./tests/
+RUN PYTHONPATH=/app pytest -q tests
 
 # Copy compiled React frontend bundle to backend static web_dist
 COPY --from=web-builder /build/web/dist ./app/web_dist

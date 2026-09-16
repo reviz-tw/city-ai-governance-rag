@@ -155,7 +155,7 @@
                 <label class="block text-xs font-semibold text-slate-600 mb-1">語言 / 發布年份</label>
                 <div class="flex space-x-2">
                   <input type="text" id="meta-lang" placeholder="zh-TW" class="w-1/2 text-xs p-2 rounded border border-slate-300 focus:ring-indigo-500 focus:outline-none">
-                  <input type="number" id="meta-year" placeholder="2025" class="w-1/2 text-xs p-2 rounded border border-slate-300 focus:ring-indigo-500 focus:outline-none">
+                  <input type="number" id="meta-year" placeholder="未記載可留空" class="w-1/2 text-xs p-2 rounded border border-slate-300 focus:ring-indigo-500 focus:outline-none">
                 </div>
               </div>
             </div>
@@ -176,10 +176,12 @@
               <textarea id="cleaned-text-preview" rows="5" placeholder="清理後、去除頁首頁尾與雜訊後的乾淨文字..." class="w-full text-xs p-2.5 rounded border border-slate-300 focus:ring-indigo-500 focus:outline-none bg-slate-50 font-mono"></textarea>
             </div>
 
+            <label><input type="checkbox" id="document-rights"> 已確認可處理、翻譯並依設定分享此文件</label>
+            <a href="/?admin=1">開啟文件庫：編輯、檢查差異與發布</a>
             <!-- Commit Button -->
             <button onclick="commitToIndex()" id="btn-commit-index" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 px-4 rounded-lg text-sm flex items-center justify-center space-x-2 transition shadow-sm">
               <i data-lucide="cloud-upload" class="w-4 h-4"></i>
-              <span>確認上傳至 GCS 並觸發 Vertex AI Search 建立索引</span>
+              <span>儲存原始文件與切片草稿</span>
             </button>
           </div>
         </div>
@@ -520,7 +522,7 @@
           document.getElementById('meta-domain').value = meta.policy_domain || "公務機關生成式AI指引";
           document.getElementById('meta-doctype').value = meta.document_type || "政策指引 (Guideline)";
           document.getElementById('meta-lang').value = meta.language || "zh-TW";
-          document.getElementById('meta-year').value = meta.publication_year || 2025;
+          document.getElementById('meta-year').value = meta.publication_year || '';
           document.getElementById('meta-summary').value = meta.summary || "";
           document.getElementById('cleaned-text-preview').value = data.cleaned_text || "";
           currentCleanedText = data.cleaned_text || "";
@@ -539,6 +541,17 @@
       }
     }
 
+    async function previewChunksAction() {
+      const text = document.getElementById('cleaned-text-preview').value || document.getElementById('raw-text-input').value;
+      const form = new FormData(); form.append('text',text); form.append('chunk_size','1500'); form.append('chunk_overlap','0');
+      const response=await fetch('/api/documents/preview-chunks',{method:'POST',body:form});
+      if(!response.ok) { alert('無法預覽，請確認已登入且具編輯權限。'); return; }
+      const values=await response.json();
+      let output=document.getElementById('draft-chunks-preview');
+      if(!output) { output=document.createElement('pre'); output.id='draft-chunks-preview'; output.style.whiteSpace='pre-wrap'; document.getElementById('cleaned-text-preview').after(output); }
+      output.textContent='草稿預覽，尚未發布\n\n'+values.map(c=>c.content).join('\n\n—— 切片邊界 ——\n\n');
+    }
+
     async function commitToIndex() {
       const title = document.getElementById('meta-title').value;
       if (!title.trim()) {
@@ -555,7 +568,7 @@
       if (currentFile) {
         formData.append('file', currentFile);
       } else {
-        const text = currentCleanedText || document.getElementById('raw-text-input').value;
+        const text = document.getElementById('raw-text-input').value;
         const blob = new Blob([text], { type: 'text/plain' });
         formData.append('file', blob, title + ".txt");
       }
@@ -565,7 +578,9 @@
       formData.append('policy_domain', document.getElementById('meta-domain').value);
       formData.append('document_type', document.getElementById('meta-doctype').value);
       formData.append('language', document.getElementById('meta-lang').value);
-      formData.append('publication_year', document.getElementById('meta-year').value);
+      if (document.getElementById('meta-year').value) formData.append('publication_year', document.getElementById('meta-year').value);
+      formData.append('rights_confirmed', String(document.getElementById('document-rights').checked));
+      formData.append('cleaned_text', document.getElementById('cleaned-text-preview').value);
       formData.append('auto_ai_tag', 'false');
 
       try {
@@ -578,7 +593,7 @@
           alert("🎉 " + res.message);
           clearSelectedFile();
           document.getElementById('raw-text-input').value = "";
-          switchTab('explorer');
+          location.href = '/?admin=1';
         } else {
           alert("上傳失敗: " + (res.detail || "未知錯誤"));
         }
@@ -586,11 +601,21 @@
         alert("網路錯誤: " + err.message);
       } finally {
         btn.disabled = false;
-        btn.innerHTML = '<i data-lucide="cloud-upload" class="w-4 h-4"></i><span>確認上傳至 GCS 並觸發 Vertex AI Search 建立索引</span>';
+        btn.innerHTML = '<i data-lucide="cloud-upload" class="w-4 h-4"></i><span>儲存原始文件與切片草稿</span>';
         lucide.createIcons();
       }
     }
 
+    function escapeHTML(value) {
+      return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+    }
+    function escapedFields(value) {
+      return Object.fromEntries(Object.entries(value).map(([key,item]) => [key, typeof item === 'string' ? escapeHTML(item) : item]));
+    }
+    function safeSourceURL(value) {
+      try { const url=new URL(value,location.origin); return ['http:','https:'].includes(url.protocol) ? escapeHTML(url.href) : '#'; }
+      catch { return '#'; }
+    }
     // TAB 2: Document Explorer Functions
     async function loadDocumentsList() {
       const tbody = document.getElementById('docs-table-body');
@@ -613,7 +638,7 @@
         tbody.innerHTML = `
           <tr>
             <td colspan="7" class="py-8 text-center text-rose-500">
-              載入失敗: ${err.message}
+              載入失敗: ${escapeHTML(err.message)}
             </td>
           </tr>
         `;
@@ -663,7 +688,8 @@
       }
 
       tbody.innerHTML = "";
-      docs.forEach(doc => {
+      docs.forEach(rawDoc => {
+        const doc = escapedFields(rawDoc);
         const tr = document.createElement('tr');
         tr.className = "hover:bg-slate-50 transition border-b border-slate-100";
         tr.innerHTML = `
@@ -679,7 +705,7 @@
             <span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded">${doc.policy_domain || '公共治理'}</span>
           </td>
           <td class="py-3.5 px-4 text-slate-500">
-            ${doc.publication_year || '2025'} / <span class="font-mono text-[11px]">${doc.language || 'zh-TW'}</span>
+            ${doc.publication_year || '未記載'} / <span class="font-mono text-[11px]">${doc.language || 'zh-TW'}</span>
           </td>
           <td class="py-3.5 px-4 text-slate-500 font-mono">
             ${doc.size_formatted}
@@ -687,16 +713,17 @@
           <td class="py-3.5 px-4">
             <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-100 text-emerald-800">
               <span class="w-1.5 h-1.5 mr-1 bg-emerald-500 rounded-full"></span>
-              已索引 (Indexed)
+              既有來源（索引待查）
             </span>
           </td>
           <td class="py-3.5 px-4 text-right">
-            <button onclick="inspectChunks('${encodeURIComponent(doc.filename)}')" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 font-semibold px-3 py-1.5 rounded-lg text-xs flex items-center space-x-1.5 ml-auto transition">
+            <button data-inspect="true" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 font-semibold px-3 py-1.5 rounded-lg text-xs flex items-center space-x-1.5 ml-auto transition">
               <i data-lucide="layers" class="w-3.5 h-3.5"></i>
-              <span>切片檢視</span>
+              <span>原文切片預覽</span>
             </button>
           </td>
         `;
+        tr.querySelector('[data-inspect]').addEventListener('click',()=>inspectChunks(encodeURIComponent(rawDoc.filename)));
         tbody.appendChild(tr);
       });
       lucide.createIcons();
@@ -733,16 +760,16 @@
         const data = await resp.json();
 
         if (resp.ok) {
-          subtitleEl.innerText = `${data.size_formatted} • 總字數: ${data.total_characters} 字 • GCS: ${data.gcs_uri}`;
-          badge.innerText = `共 ${data.total_chunks} 個切片`;
+          subtitleEl.innerText = `實際發布與索引請至新版文件庫查看。${data.size_formatted} • 總字數: ${data.total_characters} 字 • GCS: ${data.gcs_uri}`;
+          badge.innerText = `原文預覽 ${data.total_chunks} 個片段，非搜尋索引`;
 
           // Metadata Grid
-          const meta = data.metadata || {};
+          const meta = escapedFields(data.metadata || {});
           metaGrid.innerHTML = `
             <div><span class="text-slate-400 block">城市</span><span class="font-semibold text-slate-800">${meta.city || '全球'}</span></div>
             <div><span class="text-slate-400 block">領域</span><span class="font-semibold text-slate-800">${meta.policy_domain || '公共治理'}</span></div>
             <div><span class="text-slate-400 block">類型</span><span class="font-semibold text-slate-800">${meta.document_type || '政策文件'}</span></div>
-            <div><span class="text-slate-400 block">年份 / 語言</span><span class="font-semibold text-slate-800">${meta.publication_year || '2025'} (${meta.language || 'zh-TW'})</span></div>
+            <div><span class="text-slate-400 block">年份 / 語言</span><span class="font-semibold text-slate-800">${meta.publication_year || '未記載'} (${meta.language || 'zh-TW'})</span></div>
             ${meta.ai_summary ? `<div class="col-span-4 mt-1 bg-slate-50 p-2 rounded border border-slate-200"><span class="text-slate-400 block text-[10px]">AI 摘要</span><span class="text-slate-700">${meta.ai_summary}</span></div>` : ''}
           `;
 
@@ -751,7 +778,8 @@
           if (!data.chunks || data.chunks.length === 0) {
             chunksContainer.innerHTML = '<p class="text-center py-6 text-slate-400">此文件未產生切片。</p>';
           } else {
-            data.chunks.forEach(chunk => {
+            data.chunks.forEach(rawChunk => {
+              const chunk = escapedFields(rawChunk);
               const div = document.createElement('div');
               div.className = "p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-indigo-300 transition space-y-2";
               div.innerHTML = `
@@ -772,10 +800,10 @@
           }
           lucide.createIcons();
         } else {
-          chunksContainer.innerHTML = `<p class="text-center py-6 text-rose-500">載入失敗: ${data.detail || "未知錯誤"}</p>`;
+          chunksContainer.innerHTML = `<p class="text-center py-6 text-rose-500">載入失敗: ${escapeHTML(data.detail || "未知錯誤")}</p>`;
         }
       } catch (err) {
-        chunksContainer.innerHTML = `<p class="text-center py-6 text-rose-500">網路錯誤: ${err.message}</p>`;
+        chunksContainer.innerHTML = `<p class="text-center py-6 text-rose-500">網路錯誤: ${escapeHTML(err.message)}</p>`;
       }
     }
 
@@ -802,15 +830,13 @@
       const city = document.getElementById('rag-filter-cities').value.trim();
       const lang = document.getElementById('rag-resp-lang').value;
 
-      const formData = new FormData();
-      formData.append('query', query);
-      if (city) formData.append('city', city);
-      if (lang) formData.append('language', lang);
+      const body = {query, city:city || null, response_language:lang || 'auto', interface_language:'zh-TW'};
 
       try {
         const resp = await fetch('/api/rag/query', {
           method: 'POST',
-          body: formData
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify(body)
         });
         const data = await resp.json();
 
@@ -819,15 +845,16 @@
           sourcesBox.innerHTML = "";
 
           if (!data.sources || data.sources.length === 0) {
-            sourcesBox.innerHTML = '<p class="text-slate-400 text-center py-4">Vertex AI 知識庫中無相關特定切片（已由 Gemini 進行通識治理框架分析）</p>';
+            sourcesBox.innerHTML = '<p class="text-slate-400 text-center py-4">本次沒有取得相關原始證據，無法提出有來源依據的政策結論。</p>';
           } else {
-            data.sources.forEach(s => {
+            data.sources.forEach(rawSource => {
+              const s = escapedFields(rawSource);
               const div = document.createElement('div');
               div.className = "p-3 bg-slate-50 border border-slate-200 rounded-lg";
               div.innerHTML = `
                 <div class="flex justify-between items-center font-bold text-slate-800 text-[11px] mb-1">
                   <span class="text-indigo-700">[引用來源 ${s.citation_id}] 《${s.title}》</span>
-                  ${s.link ? `<a href="${s.link}" target="_blank" class="text-indigo-500 hover:underline text-[10px]">開啟來源</a>` : ''}
+                  ${s.link ? `<a href="${safeSourceURL(rawSource.link)}" target="_blank" rel="noopener noreferrer" class="text-indigo-500 hover:underline text-[10px]">開啟來源</a>` : ''}
                 </div>
               `;
               sourcesBox.appendChild(div);

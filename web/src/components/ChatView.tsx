@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, FC, FormEvent, KeyboardEvent } from 'react';
-import { Topic, ChatMessage, Citation } from '../types';
+import { ChatMessage, Citation } from '../types';
 import { UIStrings } from '../i18n';
 import {
   Send,
@@ -16,22 +16,20 @@ import {
 
 interface ChatViewProps {
   t: UIStrings;
-  topic: Topic;
   messages: ChatMessage[];
   loading: boolean;
   onSendMessage: (text: string) => void;
   onClearHistory: () => void;
-  onOpenTopics: () => void;
+  onOpenSource: (id: string) => void;
 }
 
 export const ChatView: FC<ChatViewProps> = ({
   t,
-  topic,
   messages,
   loading,
   onSendMessage,
   onClearHistory,
-  onOpenTopics,
+  onOpenSource,
 }) => {
   const [inputText, setInputText] = useState('');
   const [isComposing, setIsComposing] = useState(false);
@@ -163,17 +161,11 @@ export const ChatView: FC<ChatViewProps> = ({
     <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
       {/* Top Focus Bar */}
       <div className="flex-none flex items-center gap-3 px-5 py-3 border-b border-[var(--color-neutral-200)] bg-[var(--color-bg)] z-10">
-        <Sparkles className="icn text-[var(--color-accent-600)]" />
-        <span className="text-xs sm:text-[13px] text-[var(--color-neutral-600)] flex-none">
-          {t.focusLabel}
-        </span>
-        <span className="text-xs sm:text-[13.5px] font-bold text-[var(--color-text)] truncate">
-          {topic.title}
-        </span>
         <div className="ml-auto flex items-center gap-2">
           {messages.length > 0 && (
             <button
               type="button"
+              disabled={loading}
               onClick={onClearHistory}
               className="btn btn-ghost text-xs px-2.5 py-1 text-[var(--color-neutral-600)] hover:text-red-700"
               title={t.clearHistoryTitle}
@@ -182,13 +174,7 @@ export const ChatView: FC<ChatViewProps> = ({
               <span className="hidden sm:inline">{t.restartBtn}</span>
             </button>
           )}
-          <button
-            type="button"
-            onClick={onOpenTopics}
-            className="btn btn-secondary text-xs px-3.5 py-1.5 font-heading"
-          >
-            {t.switchBtn}
-          </button>
+
         </div>
       </div>
 
@@ -208,31 +194,7 @@ export const ChatView: FC<ChatViewProps> = ({
             <p className="m-0 text-xs sm:text-[13.5px] text-[var(--color-neutral-700)] leading-relaxed max-w-lg">
               {t.welcomeDesc}
             </p>
-
-            {/* Quick Prompt / Topic Chips */}
-            <div className="flex gap-2 flex-wrap justify-center mt-2 max-w-xl">
-              {topic.sampleQuestions.map((q, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => onSendMessage(q)}
-                  className="tag tag-outline cursor-pointer text-xs py-1.5 px-3.5 hover:bg-[var(--color-accent-100)] transition-all font-body text-left"
-                >
-                  <HelpCircle className="w-3 h-3 inline mr-1 text-[var(--color-accent)]" />
-                  <span>{q}</span>
-                </button>
-              ))}
-              {topic.tags.map((tag, idx) => (
-                <button
-                  key={`tag-${idx}`}
-                  type="button"
-                  onClick={() => setInputText(tag.replace('#', '') + ' ')}
-                  className="tag tag-neutral cursor-pointer text-xs py-1.5 px-3 hover:bg-[var(--color-neutral-200)] transition-all"
-                >
-                  #{tag.replace('#', '')}
-                </button>
-              ))}
-            </div>
+            <div className="flex flex-wrap justify-center gap-2 mt-3">{t.sampleQuestions.map(question=><button key={question} className="btn text-xs" disabled={loading} onClick={()=>onSendMessage(question)}>{question}</button>)}</div>
           </div>
         ) : (
           messages.map((msg) => (
@@ -262,10 +224,11 @@ export const ChatView: FC<ChatViewProps> = ({
                 }`}
               >
                 {msg.role === 'user' ? (
-                  <p className="m-0 leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                  <p dir="auto" className="m-0 leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                 ) : (
                   <div>
-                    {renderFormattedContent(msg.content, msg.citations)}
+                    <div dir="auto" lang={msg.response_language}>{renderFormattedContent(msg.content, msg.citations)}</div>
+                    {msg.error && <p role="alert" className="text-red-700">{msg.error}</p>}
 
                     {/* Citations List if present */}
                     {msg.citations && msg.citations.length > 0 && (
@@ -283,7 +246,7 @@ export const ChatView: FC<ChatViewProps> = ({
                               className="text-xs bg-[var(--color-surface)] border border-[var(--color-divider)] hover:border-[var(--color-accent)] px-2.5 py-1 rounded-full text-[var(--color-text)] hover:text-[var(--color-accent-700)] transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
                             >
                               <span className="font-bold text-[var(--color-accent-700)]">[{c.citation_id}]</span>
-                              <span className="truncate max-w-[200px]">{c.title}</span>
+                              <span className="truncate max-w-[200px]">{c.title} {c.language ? `(${c.language})` : ""}</span>
                             </button>
                           ))}
                         </div>
@@ -361,9 +324,10 @@ export const ChatView: FC<ChatViewProps> = ({
               <X className="w-4 h-4" />
             </button>
           </div>
-          <div className="bg-[var(--color-surface)] rounded-[var(--radius-md)] p-3 border border-[var(--color-divider)] text-xs text-[var(--color-text)] leading-relaxed font-mono whitespace-pre-wrap">
+          <div dir="auto" className="bg-[var(--color-surface)] rounded-[var(--radius-md)] p-3 border border-[var(--color-divider)] text-xs text-[var(--color-text)] leading-relaxed font-mono whitespace-pre-wrap">
             {selectedCitation.snippet || selectedCitation.title}
           </div>
+          {selectedCitation.document_id && <button className="btn btn-primary" onClick={() => {onOpenSource(selectedCitation.document_id!); setSelectedCitation(null);}}>查看原文／翻譯</button>}
           {selectedCitation.link && (
             <div className="mt-2 flex justify-end">
               <span className="text-[11px] text-[var(--color-neutral-500)] truncate">
@@ -383,6 +347,7 @@ export const ChatView: FC<ChatViewProps> = ({
           <input
             className="input flex-1"
             type="text"
+            dir="auto"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}

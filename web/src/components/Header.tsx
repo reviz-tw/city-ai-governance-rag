@@ -1,24 +1,18 @@
 import { FC, ChangeEvent } from 'react';
-import { BookOpen, Check, Globe } from 'lucide-react';
-import { LanguageCode } from '../types';
+import { Check, Globe } from 'lucide-react';
+import { InterfaceLanguage, normalizeInterfaceLanguage } from '../lib/languages';
 import { UIStrings } from '../i18n';
 
 interface HeaderProps {
   t: UIStrings;
-  lang: LanguageCode;
-  onLangChange: (newLang: LanguageCode) => void;
-  documentCount?: number;
+  lang: InterfaceLanguage;
+  onLangChange: (newLang: InterfaceLanguage) => void;
 }
 
-export const Header: FC<HeaderProps> = ({ t, lang, onLangChange, documentCount }) => {
+export const Header: FC<HeaderProps> = ({ t, lang, onLangChange }) => {
   const handleSelectChange = (e: ChangeEvent<HTMLSelectElement>) => {
-    onLangChange(e.target.value as LanguageCode);
+    onLangChange(normalizeInterfaceLanguage(e.target.value));
   };
-
-  // Format doc count if dynamic count available
-  const docText = documentCount && documentCount !== 22
-    ? t.docCount.replace(/\d+/, documentCount.toString())
-    : t.docCount;
 
   return (
     <header
@@ -53,12 +47,6 @@ export const Header: FC<HeaderProps> = ({ t, lang, onLangChange, documentCount }
 
       {/* Right Controls */}
       <div className="ml-auto flex items-center gap-3">
-        {/* Document Count Tag */}
-        <div className="tag tag-accent-2 hidden sm:inline-flex gap-1.5 py-1 px-3">
-          <BookOpen className="w-3.5 h-3.5 flex-none" />
-          <span>{docText}</span>
-        </div>
-
         {/* Live Q&A Tag */}
         <div className="tag tag-accent inline-flex gap-1.5 py-1 px-3">
           <Check className="w-3.5 h-3.5 flex-none stroke-[2.75]" />
@@ -88,7 +76,6 @@ export const Header: FC<HeaderProps> = ({ t, lang, onLangChange, documentCount }
             <option value="fr">Français (French)</option>
             <option value="es">Español (Spanish)</option>
             <option value="ru">Русский (Russian)</option>
-            <option value="ar">العربية (Arabic)</option>
           </select>
         </div>
       </div>

@@ -1,8 +1,14 @@
 steps:
+  # Reuse the previous image's dependency layers; first deployment can miss cache.
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['pull', '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:latest']
+    allowFailure: true
+    id: 'pull-cache'
   # 1. Build Docker image for Vertex AI Search & MCP Backend
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
+      - '--cache-from=${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:latest'
       - '-t'
       - '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:${_TAG}'
       - '-t'
@@ -20,7 +26,7 @@ steps:
       - '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}'
     id: 'push-image'
 
-  # 3. Deploy to Cloud Run (Serverless, backed by Vertex AI Search)
+  # 3. Deploy a candidate revision. Existing traffic changes only after acceptance.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -35,8 +41,15 @@ steps:
       - '--memory=1Gi'
       - '--cpu=1'
       - '--min-instances=0'
+      - '--max-instances=2'
       - '--cpu-boost'
-      - '--set-env-vars=GCP_PROJECT_ID=${PROJECT_ID},GCP_REGION=${_LOCATION},VERTEX_DATA_STORE_ID=city-governance-datastore,GCS_BUCKET_NAME=${PROJECT_ID}-city-governance-docs,VERTEX_LOCATION=global,GEMINI_MODEL=gemini-2.5-flash'
+      - '--no-traffic'
+      - '--tag=candidate'
+      - '--timeout=1800'
+      - '--concurrency=8'
+      - '--env-vars-file=infra/env.dev.yaml'
+      - '--set-secrets=AUTH_SESSION_SECRET=${_SESSION_SECRET}:latest,DATABASE_URL=${_DATABASE_SECRET}:latest'
+      - '--add-cloudsql-instances=${PROJECT_ID}:${_LOCATION}:${_SQL_INSTANCE}'
     id: 'deploy-cloud-run'
 
 images:
@@ -49,6 +62,9 @@ substitutions:
   _REPO_NAME: 'haystack-dev'
   _IMAGE_NAME: 'city-rag-backend-dev'
   _SERVICE_NAME: 'city-rag-backend-dev'
+  _SQL_INSTANCE: 'city-governance-postgres'
+  _SESSION_SECRET: 'city-governance-session'
+  _DATABASE_SECRET: 'city-governance-database-url'
 
 options:
   logging: CLOUD_LOGGING_ONLY

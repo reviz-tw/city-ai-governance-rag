@@ -1,124 +1,127 @@
 import json
-import logging
-from typing import Any, List, Optional
+from urllib.parse import urlsplit
+from typing import Optional
 from mcp.server.fastmcp import FastMCP
-try:
-    from mcp.server.transport_security import TransportSecuritySettings
-except ImportError:
-    TransportSecuritySettings = None
-
-from app.pipelines.vertex_search import search_vertex_data_store, query_city_governance_rag_vertex
+from mcp.server.transport_security import TransportSecuritySettings
+from app.core.config import settings
+from app.pipelines.vertex_search import retrieve, query_city_governance_rag_vertex
 from app.pipelines.cleaner import clean_and_annotate_document, preview_chunks
+from app.services.auth import require_user, require_editor
+from app.services.context import ResearchContext
+from app.services import jobs, documents
+from app.models.artifacts import ArtifactRequest
 
-logger = logging.getLogger(__name__)
+def transport_security(origins):
+    return TransportSecuritySettings(enable_dns_rebinding_protection=True,
+                 allowed_hosts=list(dict.fromkeys(['localhost','127.0.0.1','localhost:*','127.0.0.1:*'] +
+                     [urlsplit(origin).netloc for origin in origins])), allowed_origins=origins)
 
-# Initialize FastMCP Server backed by Vertex AI Search
-# Configure TransportSecuritySettings to disable DNS rebinding protection for Cloud Run domains
-fastmcp_kwargs = {
-    "dependencies": ["google-cloud-discoveryengine", "google-generativeai"]
-}
-if TransportSecuritySettings is not None:
-    try:
-        fastmcp_kwargs["transport_security"] = TransportSecuritySettings(
-            enable_dns_rebinding_protection=False,
-            allowed_hosts=["*"]
-        )
-    except Exception as e:
-        logger.warning(f"Failed to initialize TransportSecuritySettings: {e}")
+mcp = FastMCP('City-AI-Governance-MCP', stateless_http=True, dependencies=['google-cloud-discoveryengine','google-genai'],
+             transport_security=transport_security(settings.ALLOWED_ORIGINS))
 
-mcp = FastMCP("City-AI-Governance-Vertex-MCP", **fastmcp_kwargs)
+
+def output(value):
+    return json.dumps(value, ensure_ascii=False, default=str)
 
 @mcp.tool()
-def search_city_ai_governance_knowledge(
-    query: str,
-    city: Optional[str] = None,
-    language: Optional[str] = None,
-    top_k: int = 5
-) -> str:
-    """
-    搜尋全球城市 AI 治理 Vertex AI 知識庫中的政策法規、白皮書與標竿案例。
-    
-    :param query: 檢索關鍵字或語意查詢句 (例如: '公務機關使用生成式AI之指引', '演算法透明度法規比較')
-    :param city: 指定過濾的城市名稱 (例如: '台北', '倫敦', '紐約', '新加坡', '東京')
-    :param language: 指定語言代碼 (例如: 'zh', 'en', 'ja')
-    :param top_k: 回傳最相關的片段數量 (預設 5)
-    """
-    try:
-        filter_parts = []
-        if city:
-            filter_parts.append(f'city = ANY("{city}")')
-        if language:
-            filter_parts.append(f'language = ANY("{language}")')
-        filter_expr = " AND ".join(filter_parts) if filter_parts else None
-
-        results = search_vertex_data_store(
-            query=query,
-            page_size=top_k,
-            filter_expr=filter_expr
-        )
-        return json.dumps(results, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logger.error(f"MCP search error: {e}")
-        return json.dumps({"error": str(e)}, ensure_ascii=False)
+def search_city_ai_governance_knowledge(query: str, city: Optional[str] = None,
+                                        source_languages: Optional[list[str]] = None, top_k: int = 5) -> str:
+    """Search original evidence. source_languages ONLY filters document language; omitted means all languages."""
+    require_user()
+    if not 1 <= top_k <= 20:
+        raise ValueError('top_k must be between 1 and 20')
+    return output(retrieve(query, city, source_languages)[:top_k])
 
 @mcp.tool()
-def ask_city_ai_governance_rag(
-    question: str,
-    city: Optional[str] = None,
-    language: Optional[str] = None
-) -> str:
+def ask_city_ai_governance_rag(question: str, city: Optional[str] = None,
+                               response_language: str = 'auto', interface_language: Optional[str] = None,
+                               source_languages: Optional[list[str]] = None,
+                               research_context: Optional[ResearchContext] = None) -> str:
+    """Answer using original evidence and return citations with document IDs and languages.
+
+    response_language controls the answer; auto detects the question language.
+    interface_language is only a fallback. source_languages independently filters sources.
+    research_context contains only explicitly supplied bounded history; host conversations are never read.
     """
-    向全球城市 AI 治理 RAG 系統提問，獲取由 Google Vertex AI Search & Gemini Grounding 支援的政策比較與深度分析（附帶精確引文來源）。
-    
-    :param question: 研究或諮詢問題 (例如: '比較新加坡與紐約在公共安全 AI 應用的監管機制差異')
-    :param city: 限定特定城市 (若為全球比較則留空)
-    :param language: 限定語言代碼
-    """
-    try:
-        res = query_city_governance_rag_vertex(
-            query=question,
-            city_filter=city,
-            language_filter=language
-        )
-        return res["answer"]
-    except Exception as e:
-        logger.error(f"MCP ask error: {e}")
-        return f"Vertex AI RAG 查詢發生錯誤: {str(e)}"
+    require_user()
+    return output(query_city_governance_rag_vertex(question, city, response_language, interface_language,
+                                                    source_languages, research_context))
 
 @mcp.tool()
-def ai_clean_and_annotate_governance_doc(
-    raw_text: str,
-    filename: Optional[str] = None
-) -> str:
-    """
-    透過 AI 協助研究員預清理政策文件、去除雜訊，並自動萃取城市 AI 治理專業 Metadata（城市、領域、類型、摘要與標籤）。
-    
-    :param raw_text: 原始文件文字
-    :param filename: 檔案名稱
-    """
-    try:
-        res = clean_and_annotate_document(raw_text=raw_text, filename=filename)
-        return json.dumps(res.model_dump(), ensure_ascii=False, indent=2)
-    except Exception as e:
-        logger.error(f"MCP clean error: {e}")
-        return json.dumps({"error": str(e)}, ensure_ascii=False)
+def ai_clean_and_annotate_governance_doc(raw_text: str, filename: Optional[str] = None) -> str:
+    """Editor-only document cleanup; this does not upload or publish any document."""
+    require_editor()
+    return output(clean_and_annotate_document(raw_text, filename).model_dump())
 
 @mcp.tool()
-def inspect_document_chunks(
-    text: str,
-    chunk_size: int = 500,
-    chunk_overlap: int = 80
-) -> str:
+def inspect_document_chunks(text: str, chunk_size: int = 500, chunk_overlap: int = 80) -> str:
+    """Temporary automatic chunk preview, not the published search index."""
+    require_user()
+    if not 100 <= chunk_size <= 5000 or not 0 <= chunk_overlap < chunk_size or len(text) > 100000:
+        raise ValueError('Invalid chunk preview size')
+    return output([p.model_dump() for p in preview_chunks(text, {}, chunk_size, chunk_overlap)])
+
+
+def artifact(kind, scope, message_ids, source_ids, language, context, audience='researchers', pages=6):
+    return output(jobs.create(ArtifactRequest(kind=kind, scope=scope, message_ids=message_ids,
+        source_ids=source_ids, language=language, context=context, audience=audience, pages=pages)))
+
+@mcp.tool()
+def create_governance_chart(scope: str, message_ids: list[str], source_ids: list[str],
+                             language: str = 'zh-TW', context: str = '') -> str:
+    """Create a chart draft from an explicitly selected answer/conversation and authorized source IDs.
+    Numeric charts require traceable numbers. Review and confirm the draft before SVG/PNG rendering.
     """
-    預覽文件切片 (Chunking) 的切分狀況、長度與 Token 估算，用於確認切片邊界合理性。
-    
-    :param text: 欲切片之本文內容
-    :param chunk_size: 每個切片字元長度 (預設 500)
-    :param chunk_overlap: 重疊字元數 (預設 80)
+    return artifact('chart', scope, message_ids, source_ids, language, context)
+
+@mcp.tool()
+def create_governance_report(scope: str, message_ids: list[str], source_ids: list[str],
+                              language: str = 'zh-TW', context: str = '') -> str:
+    """Create a report draft. Original evidence is reloaded; confirm it to render a downloadable PDF."""
+    return artifact('pdf', scope, message_ids, source_ids, language, context)
+
+@mcp.tool()
+def create_governance_slides(scope: str, message_ids: list[str], source_ids: list[str],
+                              language: str = 'zh-TW', context: str = '', audience: str = 'researchers', pages: int = 6) -> str:
+    """Create an outline for editable PPTX slides. Review audience, page count and outline before confirming."""
+    return artifact('pptx', scope, message_ids, source_ids, language, context, audience, pages)
+
+@mcp.tool()
+def translate_governance_document(document_id: str, target_language: str, mode: str,
+                                    block_ids: Optional[list[str]] = None,
+                                    acknowledge_extraction_limits: bool = False) -> str:
+    """Translate an authorized original document in passage or document mode; never overwrite/index the translation.
+    Full translation may fail if OCR is required. Outputs are AI-assisted, not official translations.
     """
-    try:
-        previews = preview_chunks(text, {}, chunk_size, chunk_overlap)
-        return json.dumps([p.model_dump() for p in previews], ensure_ascii=False, indent=2)
-    except Exception as e:
-        logger.error(f"MCP chunk preview error: {e}")
-        return json.dumps({"error": str(e)}, ensure_ascii=False)
+    return output(jobs.create(ArtifactRequest(kind='translation', scope=mode, source_ids=[document_id],
+        language=target_language, block_ids=block_ids or [], acknowledge_extraction_limits=acknowledge_extraction_limits)))
+
+@mcp.tool()
+def read_governance_document(document_id: str) -> str:
+    """Read authorized original paragraphs, IDs, page locations, version and extraction limitations."""
+    return output(documents.describe(documents.get(document_id), True))
+
+@mcp.tool()
+def get_governance_task(task_id: str) -> str:
+    """Get this user's task status/draft and authenticated download paths. IDs do not grant access."""
+    job = jobs.get(task_id)
+    if job.kind != 'index':
+        sources, _ = jobs.inputs(ArtifactRequest.model_validate(job.payload), require_user())
+        if sources != job.payload['sources']:
+            raise ValueError('Source version changed; regenerate this task')
+    result = jobs.describe(job)
+    for file in (result.get('result') or {}).get('files', []):
+        file['download_path'] = f'/api/artifacts/{task_id}/download/{file["name"]}'
+        file.pop('key', None)
+    return output(result)
+
+@mcp.tool()
+def update_governance_task(task_id: str, action: str, revision: int, draft: Optional[dict] = None) -> str:
+    """Cancel, retry, or confirm a reviewed draft. Confirmation triggers actual file rendering."""
+    return output(jobs.mutate(task_id, action, revision, draft))
+
+@mcp.tool()
+def delete_governance_task(task_id: str) -> str:
+    """Delete this user's task and generated files."""
+    jobs.remove(task_id)
+    return output({'success':True})

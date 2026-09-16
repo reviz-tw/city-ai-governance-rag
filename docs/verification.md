@@ -1,0 +1,39 @@
+# 驗證紀錄（2026-09-16）
+
+本紀錄區分實際觀測與尚未通過的驗收。測試資料包含隔離合成政策及已授權研究文件，沒有把模型能翻譯視為搜尋能跨語命中的證據。
+
+## 已通過
+
+- 本機 pytest：61 項；前端 Node 契約測試：3 項；TypeScript／Vite build 成功。涵蓋語言優先序、短句 fallback、來源篩選、有限 context、SSE Unicode 逐 byte 分界、截斷錯誤、文件／任務隔離、版本變更、取消／重試／TTL、數字引用、草稿／實際發布差別、取消競爭、MCP 憑證範圍／撤銷與 worker 身分。包含索引延後續查、原 operation 重用、任務結束不殘留 pending、掃描頁拒絕翻譯、Word 表格順序及不支援語言在寫入儲存前拒絕等回歸測試。
+- Linux 容器：最終 Cloud Build `a972317a-07ce-4bd4-92d2-785e3a9bd880` SUCCESS，2026-09-16 15:19:08 UTC 完成；build log 確認 61 項後端測試通過及前端建置成功。映像標籤 `todo-20260916-r7`，依賴層重用前版快取；前一個完整建置 `0b4f6553-210d-4047-8f75-c090abb24b16` 亦 SUCCESS。尚未執行 GitHub 遠端 CI，也尚未 commit／push。
+- Google OAuth Client 已建立。localhost 以 hcchien@gmail.com 真實 Google 登入取得 HTTP 200，介面顯示本人帳號且沒有編輯／發布權限。Google Identity Services callback 僅傳 ID token；未讀取或保存 client secret。
+- Vertex global 真實呼叫：`gemini-3.7-flash` 與 `gemini-3.5-flash-lite` 皆成功。繁中 RAG 有 `[1]` 原文引用；英文 SSE 有實際增量片段並完成。PDF、可編輯 PPTX、LibreOffice 預覽 PDF 及統計圖生成成功。
+- 字型與排版：實際產出 PDF／PPTX 轉 PDF 的繁中字形已檢視；中英混排與流程箭頭有固定渲染檢查。不是僅檢查模型輸出字串。
+- 隔離 data store `city-governance-chunk-validation-20260916-v2`：啟用 chunking／layout parser 後，BYO JSON 匯入可列出真實 chunks；同一文件第二版合併後只讀回新版 merged chunk，舊 a/b chunks 不再列出。
+
+- Cloud Run revision `city-rag-backend-dev-00038-hev` 已就緒，[candidate 標籤](https://candidate---city-rag-backend-dev-wvswpuk2tq-de.a.run.app)可用；舊 revision `00031-dpk` 仍占 100% 流量。候選版真實 Gmail 登入 HTTP 200，hcchien@reviz.tw 管理員亦已完成真實 Google 登入且可見新增／修正文件入口，匿名文件 API 401。重新載入網頁後仍能從「我的產出」找到已完成的真實政策報告。
+- Cloud Scheduler 實際 OIDC 清理呼叫 HTTP 200（14:09:57 UTC）。PostgreSQL 持久化 schema 已成功初始化；Secret Manager version 1、私有 bucket、Cloud Tasks queue、Scheduler 已建立。
+
+- 實際 Cloud Tasks 四類合成任務均完成，PDF／PPTX＋預覽 PDF／SVG＋PNG／全文翻譯已授權下載；另一個測試身分讀取文件與任務均為 404。測試 session 與資料專門建立，未擷取真人 Google 憑證。真人 GIS 登入另有前述獨立驗證。
+- 以過期合成任務驗證：下載立即 404，實際 Scheduler 執行後資料庫紀錄與 GCS 物件均刪除。
+- 真實 200 段、19,005 字政策文件曾因模型回傳每節超過 12 個引用而失敗；schema 改為保留上限語意說明後，同文件輸出 5 節通過本機實際模型驗證。雲端重試、瀏覽器草稿確認及 PDF 渲染均已完成，保留該真實報告供使用者下載。
+- r5 候選 MCP 實測：initialize、12 個工具清單、授權文件讀取成功；以中文問題及明確日文回答語言取得 `gemini-3.7-flash` 的回答與 3 個原文來源。撤銷個人 MCP 憑證後回傳 401。這不等於跨語搜尋已通過。
+
+- 固定原文片段的模型比較已完成：繁中／英文／日文 4 題、2 個模型，共 8 次呼叫，引用、否定、例外條件、資料不足、延遲及成本門檻通過；詳見 [模型比較](model-benchmark.md)。Search 召回不在這組固定證據測試範圍。
+
+- 調整語言範圍後，中文 PDF／6 頁可編輯 PPTX 與預覽 PDF／SVG／PNG、日文全文文字譯本皆已在 Cloud Tasks 完成並下載；實際檢視中文 PDF、投影片正文及圖表；最終 r7 重新渲染、下載後確認中文全形標點顯示正常。日文譯文保留 2026、20 件、禁止自動核准與使用 AI 前須評估隱私風險。投影片草稿曾將「需要審查」誤寫成「已完成審查」，已在確認前依原文修正，不能省略內容審閱。
+- 延後續作使用同一份已完成的日文合成譯文，Cloud Tasks 排程 20 秒後處理；任務由 queued 回到 completed，未新增模型生成。
+- 已移除的語言選項在候選頁面不再顯示，回答／來源語言／翻譯 API 均拒絕該代碼並回傳 422。
+- 驗證結束後已刪除合成測試文件、任務、儲存物件與測試憑證；保留本機驗證產出及使用者的真實政策報告。本機測試伺服器與 Cloud SQL Proxy 已停止。
+
+## 尚未通過
+
+- 自訂 chunks 的 Search：隔離 store／engine 查詢仍回空結果，semanticState=DISABLED。三份英／繁中／日合成文件的 operation `import-documents-11482740810101247929` 在 14:30:38 UTC 回報 done=true、failureCount=3，錯誤 code 14：文件已匯入且分段完成，但尚未完成索引。15:14:22 UTC 再查仍回傳 0 筆、semanticState=DISABLED；英／繁中／日查詢均尚無命中；不能把 operation 結束或 chunks 可讀當成 Search 成功。因此跨語 Search 不算通過，也尚未開啟新文件發布。
+- 完整政策文件的翻譯人工驗收。已有結構／數字保護與部分內容抽驗，不能宣稱所有真實內容品質已獲人工認可。
+
+## 外部依據
+
+- [Google 基本身分登入的測試名單例外](https://support.google.com/cloud/answer/15549945?hl=en)：只要求基本身分時，使用者不必在 Google 測試名單內；網站另行限制兩個已核准帳號。
+- [Search parsing/chunking](https://docs.cloud.google.com/generative-ai-app-builder/docs/parse-chunk-documents)：BYO chunks 為 Preview；須驗證實際 chunks 與 Search，不能以 console 匯入紀錄替代。
+- [模型生命週期](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions)：原 TODO 對 2.5 的敘述過早；其退役日為 2026-10-20。這次移除舊 SDK／1.5 fallback，使用目標專案實測的新模型。
+- [Search 支援語言](https://docs.cloud.google.com/generative-ai-app-builder/docs/languages-locales)：支援包含繁中、英文與日文，但官方建議依語言分開 data store；支援語言清單不保證任意跨語查詢的召回率。待隔離索引可檢索後，以明確來源語言和文件 ID 驗證三個跨語案例。

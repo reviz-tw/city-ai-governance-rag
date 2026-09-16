@@ -1,7 +1,7 @@
 import logging
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -11,6 +11,12 @@ from starlette.types import Receive, Scope, Send
 from app.core.config import settings
 from app.api.routes import router as api_router
 from app.mcp.server import mcp
+from app.services.auth import router as auth_router
+from app.services.auth_middleware import AuthenticationMiddleware
+from app.api.workspace import router as workspace_router
+from app.services import store
+import threading
+from app.worker import serve
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("city-governance-vertex-rag")
@@ -28,17 +34,28 @@ except Exception as e:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("正在初始化 全球城市 AI 治理 Vertex AI Search & MCP 伺服器...")
-    if session_manager is not None:
-        try:
+    if settings.ENVIRONMENT == 'production':
+        if not (settings.GOOGLE_OAUTH_CLIENT_ID and len(settings.AUTH_SESSION_SECRET)>=32
+                and settings.DATABASE_URL.startswith('postgresql') and settings.ARTIFACT_GCS_BUCKET
+                and settings.CLOUD_TASKS_QUEUE and settings.WORKER_SERVICE_ACCOUNT):
+            raise RuntimeError('Production requires Google Sign-In, persistent database/storage and Cloud Tasks configuration')
+    store.initialize()
+    stop = threading.Event()
+    worker = None
+    if settings.WORKER_ENABLED and not settings.CLOUD_TASKS_QUEUE:
+        worker = threading.Thread(target=serve, args=(stop,), daemon=True)
+        worker.start()
+    try:
+        if session_manager is not None:
             async with session_manager.run():
                 yield
-        except Exception as e:
-            logger.error(f"MCP Session Manager lifespan 執行異常: {e}")
+        else:
             yield
-    else:
-        yield
-    logger.info("伺服器關閉。")
+    finally:
+        stop.set()
+        if worker:
+            worker.join(timeout=2)
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -49,7 +66,7 @@ app = FastAPI(
 # CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -57,12 +74,14 @@ app.add_middleware(
 
 # 掛載 REST API
 app.include_router(api_router)
+app.include_router(auth_router)
+app.include_router(workspace_router)
 
 class UnifiedMCPApp:
     """
     整合式 MCP ASGI 路由器：
-    - GET /mcp/sse: 傳統 SSE 串流 (供 LibreChat 等客戶端)
-    - POST /mcp/messages/...: 傳統 SSE 訊息發送 (供 LibreChat 等客戶端)
+    - GET /mcp/sse: 傳統 SSE 串流
+    - POST /mcp/messages/...: 傳統 SSE 訊息發送
     - POST /mcp, POST /mcp/sse, GET /mcp: 現代 Streamable HTTP (供 Claude Custom Connector, Cursor 等)
     """
     def __init__(self, sse_asgi, streamable_mgr):
@@ -93,7 +112,7 @@ class UnifiedMCPApp:
             return
 
         # 1. 傳統 SSE GET 端點: GET /mcp/sse
-        # 供 LibreChat 等傳統 SSE 用戶端建立串流
+        # 供傳統 SSE 用戶端建立串流
         if method == "GET" and (path.endswith("/sse") or path.endswith("/sse/")):
             if self.sse_asgi:
                 # 確保 scope 中的 path 與 root_path 正確相容於 sse_app (Starlette)
@@ -104,7 +123,7 @@ class UnifiedMCPApp:
                 return
 
         # 2. 傳統 SSE 訊息發送端點: POST /mcp/messages/...
-        # 供 LibreChat 發送 JSON-RPC 訊息到現有 SSE 會話
+        # 發送 JSON-RPC 訊息到現有 SSE 會話
         if "/messages" in path:
             if self.sse_asgi:
                 child_scope = dict(scope)
@@ -162,6 +181,7 @@ class MCPRoutingMiddleware:
 # 掛載統一 MCP 路由器與中介軟體
 mcp_unified_app = UnifiedMCPApp(sse_app, session_manager)
 app.add_middleware(MCPRoutingMiddleware, mcp_app=mcp_unified_app)
+app.add_middleware(AuthenticationMiddleware)
 app.mount("/mcp", mcp_unified_app)
 logger.info("MCP 整合端點已成功掛載於 /mcp (支援 Streamable HTTP 及 SSE)")
 
@@ -172,6 +192,7 @@ if os.path.exists(admin_static_dir):
 
 # 尋找前端 React SPA 編譯目錄 (支援 /app/web_dist, /app/static/dist, 或 ../web/dist)
 possible_web_dirs = [
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "web", "dist")),
     os.path.join(os.path.dirname(__file__), "web_dist"),
     os.path.join(os.path.dirname(__file__), "static", "dist"),
     "/app/web_dist",
@@ -192,10 +213,13 @@ if web_dist_dir:
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         # 排除 API, MCP, Admin 與文件路徑
-        if full_path == "mcp" or full_path.startswith(("api/", "mcp/", "admin", "docs", "openapi.json", "redoc")):
+        if full_path == "mcp" or full_path.startswith(("api/", "internal/", "mcp/", "admin", "docs", "openapi.json", "redoc")):
             raise HTTPException(status_code=404, detail="Not Found")
             
         file_path = os.path.join(web_dist_dir, full_path)
+        from pathlib import Path
+        if not Path(file_path).resolve().is_relative_to(Path(web_dist_dir).resolve()):
+            raise HTTPException(status_code=404, detail='Not Found')
         if full_path and os.path.exists(file_path) and os.path.isfile(file_path):
             return FileResponse(file_path)
         return FileResponse(os.path.join(web_dist_dir, "index.html"))
@@ -214,7 +238,50 @@ else:
             "mcp_sse_endpoint": "/mcp/sse"
         }
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8080, reload=True)
+@app.post('/internal/jobs/{job_id}')
+def execute_job(job_id: str, request: Request):
+    from google.oauth2 import id_token
+    from google.auth.transport.requests import Request as GoogleRequest
+    from app.services import jobs
+    from sqlalchemy import select
+    import time
+    verify_worker(request)
+    with store.session() as db:
+        job=db.scalar(select(store.Job).where(store.Job.id==job_id).with_for_update())
+        if not job or job.expires_at<=time.time():
+            return {'status':'expired'}
+        if job.status=='running':
+            if job.lease_until>time.time():
+                raise HTTPException(503,'Task already running; retry after lease expiry')
+            job.status='render_queued' if job.draft and job.kind not in {'translation','index'} else 'queued'
+            db.commit()
+    jobs.run(job_id)
+    jobs.purge_expired()
+    return {'status':'handled'}
 
+
+if __name__ == '__main__':
+    import uvicorn
+    uvicorn.run('app.main:app', host='0.0.0.0', port=8080, reload=True)
+
+
+def verify_worker(request: Request):
+    from google.oauth2 import id_token
+    from google.auth.transport.requests import Request as GoogleRequest
+    if not settings.WORKER_SERVICE_ACCOUNT:
+        raise HTTPException(503, 'Cloud worker is not configured')
+    try:
+        credential=request.headers.get('authorization','').removeprefix('Bearer ')
+        claims=id_token.verify_oauth2_token(credential,GoogleRequest(),settings.APP_ORIGIN)
+        if claims.get('email') != settings.WORKER_SERVICE_ACCOUNT or not claims.get('email_verified'):
+            raise ValueError('Wrong worker identity')
+    except Exception:
+        raise HTTPException(401,'Invalid worker credential') from None
+
+
+@app.post('/internal/cleanup')
+def cleanup(request: Request):
+    verify_worker(request)
+    from app.services import jobs
+    jobs.purge_expired()
+    return {'status': 'cleaned'}
