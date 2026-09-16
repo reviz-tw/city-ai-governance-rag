@@ -68,4 +68,7 @@
 - 最終建置 `ea965c1b-deb2-4ba5-83bd-6cdf72f793e5` SUCCESS，映像 `sha256:1cd63085057b6bc4b538bcbdf85789756bbe3cb51da71639e5c806f8f85029bd`，revision `city-rag-backend-dev-00044-tuj` Ready。2026-09-16 17:09:04 UTC 已切換 100% 主網址流量，保留同版 candidate worker 標籤。
 
 - 切換後主網址 MCP 再次通過 en／ja 跨語及 en 單語篩選；健康檢查與文件庫入口 HTTP 200，匿名文件庫 HTTP 401。本次合成測試 Documents、Publication／DraftRevision／Job 記錄、MCP 憑證與對應 GCS 物件已清除。
-- 追加切片 Diff 修正：即使合併／拆分後完整文字相同，仍顯示 Chunk 邊界、順序與原文範圍差異；隔離来源快照 70 項後端測試通過。
+- 追加切片 Diff 修正：即使合併／拆分後完整文字相同，仍顯示 Chunk 邊界、順序與原文範圍差異；隔離來源快照 70 項後端測試通過。
+
+- 隔離來源建置 `ba8092c2-cbdf-4bc9-a6aa-8af62b5ed325` SUCCESS，70 項後端測試，digest `sha256:5e227aff6d5fa4d4dcacbf72ba13d165e64c374e1a2b4f96a691fdb2c543c346`。以正常 Google 登入在候選版檢視既有文件 Diff，確認切片邊界／原文範圍可見，確認發布按鈕可用，未修改或發布該研究文件。
+- 實作 commit `61584f6e7087851181bf3af2a0e23cf61a4413a7` 已推送；[GitHub CI](https://github.com/reviz-tw/city-ai-governance-rag/actions/runs/35127373067) success。相同 commit 的區域自動建置 `e94d3930-0c95-4c9e-a414-11ec07d9659e` 產生 `00047-pol`，digest 與隔離建置完全一致；追加修正已切換 100% 流量至此 revision。

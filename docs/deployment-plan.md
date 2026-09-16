@@ -50,3 +50,5 @@ Cloud Run runtime 需在指定資源範圍取得：上述兩個 secrets 的讀�
 2026-09-17 切片改版使用既有標準 store `city-governance-chunk-validation-20260916`，未啟用自動 chunking；詳見 [Chunk-as-Document](chunk-as-document.md)。沿用原 Cloud Tasks 佇列，不新增佇列或 IAM 授權。
 
 2026-09-16 17:09:04 UTC（台北 2026-09-17）：`00044-tuj` 已接收 100% 流量；同一 revision 保留 candidate 標籤。`CHUNK_INDEX_ENABLED=true`，映像 digest 為 `sha256:1cd63085057b6bc4b538bcbdf85789756bbe3cb51da71639e5c806f8f85029bd`。舊 `00040-tod` 可作緊急服務回復，但其切片發布功能尚未啟用；內容版本回復應使用新版 Admin 的 rollback 流程。
+
+2026-09-17 追加切片邊界 Diff 驗收後，流量切至 `00047-pol`。此 revision 來自實作 commit `61584f6` 的自動建置，digest `sha256:5e227aff6d5fa4d4dcacbf72ba13d165e64c374e1a2b4f96a691fdb2c543c346`，與隔離建置快照一致。後續其他改版的 candidate 需由該改版獨立驗收。

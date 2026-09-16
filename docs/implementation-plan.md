@@ -11,7 +11,7 @@
 | 圖表／PDF／PPTX | 已完成共用任務、證據重讀、草稿確認、渲染、預覽下載與隔離 | 真實模型生成、dev Cloud Tasks／檔案下載、到期清理與多語排版檢視已通過 |
 | 原文／翻譯 | 已完成抽取、定位、版本、分段、術語、完整／部分狀態與並排閱讀 | 結構、數字與完整性自動化通過；複雜 PDF 保留擷取限制，完整譯本待人工抽驗 |
 | 切片修改／發布 | 已完成 baseline、草稿 diff、審閱 hash、版本衝突、背景匯入、檢索驗證與回復 | 標準 Chunk-as-Document 已通過雲端發布、合併／拆分、回復、原文 hash 與 FE／MCP 跨語驗收；CHUNK_INDEX_ENABLED=true |
-| 持久化 dev | 使用者已核准台灣 PostgreSQL、私有 GCS、Cloud Tasks、Secret Manager | 建立與候選部署完成；切片新版 00044-tuj 已占 100% 流量，保留同版 candidate worker 標籤 |
+| 持久化 dev | 使用者已核准台灣 PostgreSQL、私有 GCS、Cloud Tasks、Secret Manager | 建立與候選部署完成；切片新版 00047-pol 已占 100% 流量，背景任務沿用 candidate worker 標籤，後續部署需核對版本 |
 
 已確認決策：Google／Gmail 登入；Gemini global 可處理研究文件；外部測試模式與網站名單限定 hcchien@gmail.com、hcchien@reviz.tw；管理員僅 hcchien@reviz.tw。Google 基本身分登入適用測試名單例外，實際登入限制由網站名單執行。
 
