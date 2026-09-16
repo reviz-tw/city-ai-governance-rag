@@ -31,7 +31,7 @@ Cloud Run runtime 需在指定資源範圍取得：上述兩個 secrets 的讀�
 4. 使用 `infra/cloudbuild.yaml` 建置候選 revision；`--no-traffic --tag=candidate` 保留既有流量。目前 APP_ORIGIN 固定為 candidate 標籤 URL，Cloud Tasks／Scheduler 派送該候選版本，OAuth／CORS 已加入同一來源。切換流量後可保留此 worker 標籤；移動／刪除標籤前必須先處理佇列中的任務與更新 worker URL。
 5. 驗證：未登入拒絕 API、兩個帳號登入與角色、跨使用者隔離、Google Gen AI ADC、實際 RAG／SSE／MCP、完整 PDF／PPTX／SVG／PNG／翻譯任務，以及原文授權下載、取消／重試、到期清理。
 6. 自訂切片必須先通過實際 Search 命中與跨語驗收，才設定 `CHUNK_INDEX_ENABLED=true`、正式管理用 datastore／engine。僅能列出 chunks 不能視為已可檢索。
-7. 全部驗收完成後才切換流量；目前既有 revision `city-rag-backend-dev-00031-dpk` 仍為 100%，候選標籤供登入驗收。首次部署建立資料表；未來 schema 改動需資料庫 migration，不能以 `create_all` 更新既有欄位。
+7. 2026-09-16 15:39:55 UTC，依使用者明確指示將 100% 流量切至 `city-rag-backend-dev-00040-tod`；其映像 digest、環境變數、服務帳號與資源設定均與已驗證的 `00038-hev` 相同。尚未通過的自訂 chunks Search 與全文翻譯人工驗收繼續追蹤，`CHUNK_INDEX_ENABLED=false`。保留 candidate 標籤供既有 worker 派送使用。首次部署建立資料表；未來 schema 改動需資料庫 migration，不能以 `create_all` 更新既有欄位。
 
 ## 回復
 

@@ -40,6 +40,12 @@
 - 三份多語文件的 `indexStatus.pendingMessage` 仍為分段完成、索引處理中；英文字塊可直接列出。較早的 `synthetic-chunk-document` 雖有 `indexTime=2026-09-16T12:44:26Z` 且只列出新版 `merged` chunk，以其原文關鍵字或 `*` 搜尋仍無結果。因此單憑 import 完成、indexTime 或 chunks.list 不能通過驗收。
 - `semanticState=DISABLED` 僅表示該次回應沒有啟用語意搜尋；[官方欄位定義](https://docs.cloud.google.com/generative-ai-app-builder/docs/reference/rest/v1alpha/SearchResponse#SemanticState) 未提供原因。現有證據尚無法斷定是索引就緒時間、BYO chunks 服務問題或其他設定所致，也不能推論購買 LLM add-on 就能修復。此次未重新匯入、修改計費設定或切換 Cloud Run 流量，`CHUNK_INDEX_ENABLED=false` 及未完成驗收維持原狀。
 
+## 流量切換
+
+2026-09-16 15:39:55 UTC，使用者明確要求切換流量後，Cloud Run 已確認 `city-rag-backend-dev-00040-tod` 接收 100% 流量，Ready／RoutesReady 均為 True。切換前確認其映像 digest `sha256:26b5b2b609d1e12cc8e1b882fafc0c7432290d05d80db2503246966cbf7182ea`、環境變數、服務帳號與資源設定皆與已驗證的 `00038-hev` 相同。
+
+[原網址](https://city-rag-backend-dev-wvswpuk2tq-de.a.run.app)的 `/api/health`、`/api/auth/config` 及新版 JS／CSS 皆回傳 200；匿名 `/api/library` 與 `/api/auth/me` 回傳 401。瀏覽器已透過真實 Google 登入進入新版研究工作區，顯示 `hcchien@reviz.tw`、文件庫、我的產出與 MCP 入口。自訂 chunks 搜尋仍關閉，未完成項目沒有因流量切換而標記通過。
+
 ## 外部依據
 
 - [Google 基本身分登入的測試名單例外](https://support.google.com/cloud/answer/15549945?hl=en)：只要求基本身分時，使用者不必在 Google 測試名單內；網站另行限制兩個已核准帳號。
