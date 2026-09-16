@@ -173,12 +173,5 @@ def draft_revisions(document_id: str):
 
 @router.get('/library/{document_id}/indexed-chunks')
 def indexed_chunks(document_id: str):
-    from app.services import chunks
-    doc=documents.get(document_id,edit=True)
-    with store.session() as db:
-        publication=db.get(store.Publication,f'{doc.id}:{doc.published_version}')
-        if not publication or not publication.index_document_id:
-            return {'version':doc.published_version,'chunks':[], 'verified':False}
-    actual=chunks.list_index_chunks(publication.index_document_id)
-    return {'version':publication.version,'chunks':actual,
-            'verified':{c['id']:c['content'] for c in actual}=={c['id']:c['content'] for c in publication.chunks}}
+    from app.services.chunks import indexed
+    return indexed(document_id)

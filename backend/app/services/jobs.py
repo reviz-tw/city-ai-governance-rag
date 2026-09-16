@@ -435,6 +435,7 @@ def run(job_id):
             if active and active.status == 'running' and active.attempt == job.attempt:
                 active.status, active.error = 'failed', f'{type(exc).__name__}: task could not be completed; review input and retry.'
                 active.revision += 1
+                close_publication(db, active, type(exc).__name__)
                 db.commit()
 
 

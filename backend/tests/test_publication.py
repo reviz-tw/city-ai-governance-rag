@@ -19,7 +19,7 @@ def fake_index(monkeypatch,doc,visible=True,cancel=False):
     client=Mock();client.bucket.return_value.name='synthetic-bucket'
     monkeypatch.setattr(storage,'Client',Mock(return_value=client))
     index_id=doc.id+'-v1'
-    def request(path,payload=None,method='GET'):
+    def request(path,payload=None,method='GET',**kwargs):
         if path.endswith('documents:import'):
             return {'name':'synthetic-operation'}
         if path=='synthetic-operation':
@@ -31,7 +31,10 @@ def fake_index(monkeypatch,doc,visible=True,cancel=False):
                 with store.session() as db:
                     job=db.query(store.Job).filter_by(kind='index').one()
                     job.status='cancelled';db.commit()
-            return {'results':[{'chunk':{'name':f'path/documents/{index_id}/chunks/c1'}}]} if visible else {}
+            with store.session() as db:
+                publication=db.get(store.Publication,doc.id+':1')
+            records=chunks.manifest(doc,publication,'gs://synthetic-bucket/original')
+            return {'results':[{'document':record} for record in records]} if visible else {}
         raise AssertionError(path)
     monkeypatch.setattr(chunks.cloud,'request',request)
 
@@ -42,7 +45,7 @@ def test_publish_requires_review_and_remote_search_visibility(source,monkeypatch
     jobs.run(task['id'])
     assert jobs.get(task['id']).status=='completed'
     assert documents.get(doc.id).published_version==1
-    assert chunks.list_index_chunks(doc.id+'-v1')[0]['content']==doc.draft[0]['content']
+    assert chunks.indexed(doc.id)['chunks'][0]['content']==doc.draft[0]['content']
     with pytest.raises(HTTPException) as exc:
         chunks.publish(doc.id,doc.draft_revision,reviewed_diff='stale')
     assert exc.value.status_code==409

@@ -90,7 +90,15 @@ def baseline(blocks, limit=1500):
                                    refs=[dict(block_id=block['id'], start=start, end=end, page=block['page'])],
                                    algorithm='paragraph-v1'))
             start = end
-    return chunks
+    # Pack short adjacent paragraphs while retaining exact original source ranges.
+    packed=[]
+    for chunk in chunks:
+        if packed and len(packed[-1]['content'])+2+len(chunk['content'])<=limit:
+            packed[-1]['content']+='\n\n'+chunk['content']
+            packed[-1]['refs'].extend(chunk['refs'])
+        else:
+            packed.append(dict(chunk,id=f'c{len(packed)+1}',order=len(packed),algorithm='paragraph-v2'))
+    return packed
 
 
 def create(data: bytes, filename: str, mime: str, metadata: dict, cleaned_text: str | None = None):
@@ -103,7 +111,7 @@ def create(data: bytes, filename: str, mime: str, metadata: dict, cleaned_text: 
     except ValueError:
         raise HTTPException(422, 'Unsupported document language') from None
     document_id = uuid.uuid4().hex
-    key = f'originals/{document_id}/{Path(filename).name}'
+    key = f'managed-originals/{document_id}/{hashlib.sha256(data).hexdigest()}/{Path(filename).name}'
     store.put_bytes(key, data, mime)
     draft = baseline(blocks)
     if cleaned_text is not None and cleaned_text.strip():

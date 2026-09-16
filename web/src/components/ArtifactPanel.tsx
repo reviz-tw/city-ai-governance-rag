@@ -41,9 +41,11 @@ export function JobView({id, onClose}: {id: string; onClose: () => void}) {
     catch (err: any) {setError(err.message);}
   };
   return <section className="workspace-panel" aria-label="產出任務">
-    <div className="flex justify-between"><h2>產出預覽</h2><button onClick={onClose}>關閉</button></div>
+    <div className="flex justify-between"><h2>{job?.kind==='index'?'切片發布':'產出預覽'}</h2><button onClick={onClose}>關閉</button></div>
     {error && <p role="alert">{error}</p>}
     {job && <><p>狀態：{job.status} · {job.progress}%</p>
+      {job.kind==='index'&&['queued','running'].includes(job.status)&&<p>索引處理中，預計約 10～30 分鐘，實際依 Vertex 處理狀態而定。完成前維持前一發布版本；可關閉視窗，稍後從「我的產出」查看。</p>}
+      {job.kind==='index'&&job.status==='completed'&&<p>已發布 v{job.result?.published_version}，{job.result?.verified_chunks} 個切片已通過搜尋驗證。</p>}
       {job.stale && <p role="alert">來源已更新，這份產出不是最新版本；請重新建立任務。</p>}
       {job.error && <p role="alert">{job.error}</p>}
       {draft && job.status === 'awaiting_review' && <>

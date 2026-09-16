@@ -1,6 +1,6 @@
 # Dev 持久化部署與驗收
 
-目前 Cloud Run `city-rag-backend-dev` 的既有流量維持原版本。新程式需要共用 PostgreSQL、受控 GCS 儲存與 Cloud Tasks；不可以把 Cloud Run 的暫存 SQLite 當成持久化資料庫。
+Cloud Run `city-rag-backend-dev` 已切至持久化新版；後續變更仍先以 candidate 驗收。新程式需要共用 PostgreSQL、受控 GCS 儲存與 Cloud Tasks；不可以把 Cloud Run 的暫存 SQLite 當成持久化資料庫。
 
 ## 已核准建立的資源
 
@@ -39,10 +39,14 @@ Cloud Run runtime 需在指定資源範圍取得：上述兩個 secrets 的讀�
 
 自訂切片版本以資料庫的 `published_version` 為準；匯入失敗、無搜尋結果或取消均不推進指標。管理員可回復前一個可用內容版本，重新匯入並驗證後才發布。
 
-索引作業在 Cloud Tasks 每 120 秒續查同一個已保存的匯入 operation，最多到任務的 24 小時期限，不因等待而重複匯入。Google 若回報「已匯入、尚未索引」，仍須驗證遠端 chunks 內容及實際 Search 命中才發布。其他匯入錯誤停止並保留前版；人工重試遭拒的匯入才建立新的 operation。取消、刪除、到期或 worker 中斷均解除待發布狀態，避免文件永久卡住。
+索引作業在 Cloud Tasks 每 120 秒續查同一個已保存的匯入 operation，最多到任務的 24 小時期限，不因等待而重複匯入。標準 Chunk-as-Document 匯入後，仍須從 Search 取得全部切片並核對版本與內容 hash 才發布；新 metadata 傳播延遲繼續等待，預估約 10～30 分鐘，依實際索引狀態為準。其他匯入錯誤停止並保留前版；人工重試遭拒的匯入才建立新的 operation。取消、刪除、到期或 worker 中斷均解除待發布狀態，避免文件永久卡住。
 
 ## 已執行的資源檢查
 
 2026-09-16：SQL PostgreSQL 17 / db-f1-micro / 10 GiB SSD / asia-east1 / 每日 19:00 UTC 備份與 7 份保留 / 無授權公開網段 / 刪除保護；artifact bucket public access prevention + uniform access；queue 並行 2、每秒 1、最多 5 次派送；Scheduler 每小時第 15 分鐘清理。兩組 Secret Manager 第 1 版已建立，秘密值未保存到本機。
 
 `backend/scripts/dev_cloud_acceptance.py` 使用隔離的 `dev-fixture-` 資料驗證任務與權限，Google 真實登入另從瀏覽器獨立驗收。腳本需要 localhost:54329 的 Cloud SQL Auth Proxy；不要在 production 或不明測試資料上執行。
+
+2026-09-17 切片改版使用既有標準 store `city-governance-chunk-validation-20260916`，未啟用自動 chunking；詳見 [Chunk-as-Document](chunk-as-document.md)。沿用原 Cloud Tasks 佇列，不新增佇列或 IAM 授權。
+
+2026-09-16 17:09:04 UTC（台北 2026-09-17）：`00044-tuj` 已接收 100% 流量；同一 revision 保留 candidate 標籤。`CHUNK_INDEX_ENABLED=true`，映像 digest 為 `sha256:1cd63085057b6bc4b538bcbdf85789756bbe3cb51da71639e5c806f8f85029bd`。舊 `00040-tod` 可作緊急服務回復，但其切片發布功能尚未啟用；內容版本回復應使用新版 Admin 的 rollback 流程。

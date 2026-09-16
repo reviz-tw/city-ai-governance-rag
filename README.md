@@ -25,7 +25,7 @@ PYTHONPATH=backend .venv/bin/python backend/scripts/dev_server.py
 
 只取得 Google 基本身分，不要求 Gmail 郵件或 Drive 權限。`LOGIN_ALLOWED_EMAILS` 限制可登入帳號；空名單代表允許所有通過 Google 身分驗證的帳號，**目前 dev 限定兩個已核准帳號**。`ADMIN_EMAILS`、`EDITOR_EMAILS` 決定編輯角色。新文件預設私人，只有擁有者／管理員可修改；分享名單另行管理讀取權。歷史 `documents/` 公開資料集按原有公開範圍登錄，與新私人文件分開處理。
 
-原始檔不可由清理／切片草稿覆寫。每份來源保留雜湊、段落與頁碼；人工切片修改另存版本、差異與操作者。儲存草稿不會發布，匯入、實際 chunks 比對和 Search 命中均成功才切換發布版本。舊 Admin 的本地切片視圖明確標為預覽。
+原始檔不可由清理／切片草稿覆寫。每份來源保留雜湊、段落與頁碼；人工切片修改另存版本、差異與操作者。儲存草稿不會發布，每個 Chunk 以標準 Document 匯入，並經 Search 核對全部切片後才切換發布版本。預估等待 10～30 分鐘（依 Vertex 索引狀態），期間維持前版。詳見 [Chunk-as-Document](docs/chunk-as-document.md)。舊 Admin 的本地切片視圖明確標為預覽。
 
 ## 語言與研究 context
 

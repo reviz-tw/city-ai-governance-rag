@@ -284,4 +284,6 @@ def cleanup(request: Request):
     verify_worker(request)
     from app.services import jobs
     jobs.purge_expired()
+    from app.services import chunks
+    chunks.cleanup_pending()
     return {'status': 'cleaned'}

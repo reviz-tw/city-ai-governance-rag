@@ -120,7 +120,9 @@ def test_chunk_save_conflict_merge_and_no_publish(source):
     with pytest.raises(HTTPException) as exc:chunks.publish(doc.id,saved['draft_revision'])
     assert exc.value.status_code==503
     reset=chunks.save(doc.id,saved['draft_revision'],[],True)
-    assert len(reset['draft'])==3
+    assert len(reset['draft'])==1
+    assert {r['block_id'] for r in reset['draft'][0]['refs']}=={'p1','p2','p3'}
+    assert all(b['text'] in reset['draft'][0]['content'] for b in doc.blocks)
 
 
 def test_chunk_invalid_ranges_rejected(source):

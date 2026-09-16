@@ -26,3 +26,18 @@ test('Unsupported preferences fall back and removed content languages are unavai
   assert.equal(normalizeInterfaceLanguage('ar-SA'),'en');assert.equal(normalizeInterfaceLanguage('zh-TW'),'zh');
   assert.equal(normalizeInterfaceLanguage('fr'),'fr');assert.equal(INTERFACE_LANGUAGES.ar,undefined);assert.equal(CONTENT_LANGUAGES.ar,undefined);
 });
+const {splitChunk}=load('src/lib/chunks.ts');
+test('Chunk split keeps sentence boundaries and original pages/ranges',()=>{
+  const blocks=[{id:'p1',page:1,text:'Before AI use, assess privacy risks.'},{id:'p2',page:2,text:'Human review is mandatory.'}];
+  const chunk={id:'c1',content:blocks.map(b=>b.text).join('\n\n'),refs:blocks.map(b=>({block_id:b.id,page:b.page,start:0,end:b.text.length}))};
+  const parts=splitChunk(chunk,blocks,'c2');
+  assert.equal(parts.map(p=>p.content).join(''),chunk.content);
+  assert.equal(parts[0].refs[0].page,1);assert.equal(parts[1].refs[0].page,2);
+  for(const part of parts)for(const ref of part.refs)assert.ok(ref.start<ref.end);
+  assert.equal(splitChunk({...chunk,content:'字'},blocks,'c2'),null);
+});
+test('Edited text splits without inventing precise source locations',()=>{
+  const refs=[{block_id:'p1',page:7,start:0,end:4}];
+  const parts=splitChunk({id:'c1',content:'人工修正句子。保留原文來源。',refs},[{id:'p1',text:'原始文字'}],'c2');
+  assert.deepEqual(parts[0].refs,refs);assert.deepEqual(parts[1].refs,refs);
+});

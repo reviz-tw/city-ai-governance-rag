@@ -1,4 +1,4 @@
-# 驗證紀錄（2026-09-16）
+# 驗證紀錄（2026-09-16～17）
 
 本紀錄區分實際觀測與尚未通過的驗收。測試資料包含隔離合成政策及已授權研究文件，沒有把模型能翻譯視為搜尋能跨語命中的證據。
 
@@ -52,3 +52,20 @@
 - [Search parsing/chunking](https://docs.cloud.google.com/generative-ai-app-builder/docs/parse-chunk-documents)：BYO chunks 為 Preview；須驗證實際 chunks 與 Search，不能以 console 匯入紀錄替代。
 - [模型生命週期](https://cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions)：原 TODO 對 2.5 的敘述過早；其退役日為 2026-10-20。這次移除舊 SDK／1.5 fallback，使用目標專案實測的新模型。
 - [Search 支援語言](https://docs.cloud.google.com/generative-ai-app-builder/docs/languages-locales)：支援包含繁中、英文與日文，但官方建議依語言分開 data store；支援語言清單不保證任意跨語查詢的召回率。待隔離索引可檢索後，以明確來源語言和文件 ID 驗證三個跨語案例。
+
+## 2026-09-17：標準 Chunk-as-Document
+
+此節取代上述 BYO Preview 的發布方案；先前失敗紀錄保留為歷史。實作與設定見 [Chunk-as-Document](chunk-as-document.md)。
+
+- 本機 70 項後端測試、5 項前端測試及 TypeScript／Vite build 通過。新增覆蓋標準 Document manifest、不可變物件寫入、Search 完整分頁、內容 hash 核對、schema 傳播延遲、ACL 前置篩選、舊來源排除、清理失敗不回退新版，以及後續版本發布後仍重試舊清理。
+- 標準 store `city-governance-chunk-validation-20260916` 沒有開啟自動 chunking。4 筆標準 TXT Document 的匯入 operation `import-documents-12897766788439098219` 於 2026-09-16 16:38:58 UTC 建立，16:40:18 UTC 完成，4/4 成功。
+- 以中文政策問題限定英文／日文來源，命中兩種原文，`semanticState=ENABLED`；英文問題限定 zh-TW 亦命中繁中原文，無關午餐測試文件不在結果內。空查詢能列舉指定版本，供發布完整性核對；它回傳 `semanticState=DISABLED` 不等於有意義的研究問題不能做語意搜尋。
+- 第一個候選建置 `98df70cd-c207-4e39-bc6b-91555ae31280` SUCCESS，映像 `sha256:113ef1ea60e3a67fc1e15f9d3b09b91a1693db36553b44066263dd90ee653559`。真實 hcchien@reviz.tw GIS 登入成功，文件庫的兩頁合成 PDF 可合併、拆分及儲存草稿；頁 1／頁 2 refs 保留，草稿修訂遞增，已發布版本保持 v1。
+- 另以隔離測試 session 操作與 Admin UI 相同的 HTTP API，建立英文 PDF、日文 TXT、繁中 TXT 三份 private 原始文件；另一個 reader 讀取回傳 404。這種 API fixture 不當成真實 GIS 登入測試。
+- 三份文件均由既有 Cloud Tasks 實際執行發布，完成時分別核對 2／1／1 個 Chunk Documents；首次發布前維持 published_version=0。英文 PDF v2 將兩片合併並修正文句，在等待期間保持 v1，Search 核對成功後切至 v2；舊 v1 的兩筆遠端 Documents 已確認 GET 404，新 v2 Document 存在。
+- 第三版回復成功，內容等於 v1，原始 PDF／TXT SHA256 保持不變；v1／v2 遠端 Documents 皆已 GET 404，只有目前版本存在。reader 原文存取先為 404，明確加入 readers 後可讀，但發布仍為 403。
+- FE SSE 及 MCP 問答均以中文問題取得 en v3／ja v1，並以繁中完成回答；英文 PDF 引用包含 c1、頁 1 與原始文件連結。另直接核對 MCP Search 的 Unicode 全文與 canonical chunk 完全相同；source_languages=[en] 僅回傳英文，指定 en／ja 時兩者皆命中。驗收腳本強制使用 SSE 規定的 UTF-8，避免 requests 的 text 預設解碼造成亂碼。
+- 最終建置 `ea965c1b-deb2-4ba5-83bd-6cdf72f793e5` SUCCESS，映像 `sha256:1cd63085057b6bc4b538bcbdf85789756bbe3cb51da71639e5c806f8f85029bd`，revision `city-rag-backend-dev-00044-tuj` Ready。2026-09-16 17:09:04 UTC 已切換 100% 主網址流量，保留同版 candidate worker 標籤。
+
+- 切換後主網址 MCP 再次通過 en／ja 跨語及 en 單語篩選；健康檢查與文件庫入口 HTTP 200，匿名文件庫 HTTP 401。本次合成測試 Documents、Publication／DraftRevision／Job 記錄、MCP 憑證與對應 GCS 物件已清除。
+- 追加切片 Diff 修正：即使合併／拆分後完整文字相同，仍顯示 Chunk 邊界、順序與原文範圍差異；隔離来源快照 70 項後端測試通過。

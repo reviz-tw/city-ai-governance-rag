@@ -288,6 +288,8 @@ def retrieve(query, city=None, languages=None):
             if not identifier:
                 continue
             doc = documents.get(identifier)
+            if doc.published_version:
+                continue  # A migrated document must never surface stale legacy snippets.
             result['metadata'] = {**result.get('metadata',{}), 'document_id':identifier,
                                   'language':doc.language,'version':doc.original_hash}
             combined.append(result)
