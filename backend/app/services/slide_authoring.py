@@ -10,6 +10,13 @@ from app.services.languages import LANG_NAMES
 SKILL_DIR = Path(__file__).resolve().parents[1] / 'skills' / 'research-slides'
 
 
+class SlideQualityError(ValueError):
+    """A safe diagnostic category without source text or model output."""
+    def __init__(self, stage):
+        self.stage = stage
+        super().__init__(f'Slide quality checks failed after one repair ({stage})')
+
+
 def instructions():
     return '\n\n'.join((SKILL_DIR / name).read_text(encoding='utf-8')
                        for name in ('SKILL.md', 'references/examples.md'))
@@ -41,12 +48,15 @@ def generate(request, blocks, validate, progress):
         'Preserve the approved scope and evidence. Summary is deck metadata, not an extra slide.', SlideDeckDraft)
     for attempt in range(2):
         progress(50 + attempt*25)
+        stage = 'content_structure'
         try:
             deck = SlideDeckDraft.model_validate_json(raw)
             if len(deck.slides) > request.pages or (len(deck.slides) < request.pages and not deck.coverage_note.strip()):
                 raise ValueError('Respect the total page budget; explain a reduction with coverage_note')
             draft = ArtifactDraft.model_validate(deck.model_dump())
+            stage = 'source_validation'
             validate(draft)
+            stage = 'source_review'
             review = SlideReview.model_validate_json(gemini.generate(json.dumps({**context, 'draft':deck.model_dump()}, ensure_ascii=False),
                 rules + '\nREVIEW: inspect source support, qualifications, audience usefulness and unnecessary repetition. '
                 'Assess EVERY slide and its notes, especially the strength of obligations and assumptions in comparisons. '
@@ -63,9 +73,11 @@ def generate(request, blocks, validate, progress):
                 field = (f'Slide {location[1]+1} (one-based), '+'.'.join(map(str,location[2:]))) if len(location)>1 and location[0]=='slides' and isinstance(location[1],int) else '.'.join(map(str,location))
                 issues.append(f'{field}: {error["msg"]}')
         except ValueError as exc:
+            if 'readable slide area' in str(exc) or 'Shorten chart category' in str(exc):
+                stage = 'text_layout'
             issues = [str(exc)]
         if attempt:
-            raise ValueError('Slide quality checks failed after one repair: ' + '; '.join(issues)[:1200])
+            raise SlideQualityError(stage)
         progress(65)
         raw = gemini.generate(json.dumps({**context, 'outline':outline.model_dump(), 'draft_to_repair':raw, 'issues':issues}, ensure_ascii=False),
             rules + '\nREPAIR: correct the listed defects, preserve verified facts and return the complete revised deck.', SlideDeckDraft)

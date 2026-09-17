@@ -88,6 +88,7 @@ def test_quotes_allow_pdf_line_wraps_but_preserve_words_and_qualifications(sourc
     with pytest.raises(ValueError,match='verbatim'):
         jobs.validate_draft(ArtifactDraft.model_validate(value),blocks,'pptx')
     assert jobs.quotation_text('the rapist') != jobs.quotation_text('therapist')
+    assert jobs.quotation_text('因此， 當有「機 敏資料 」需求時。') == jobs.quotation_text('因此，當有「機敏資料」需求時。')
 
 
 def test_outline_requires_known_evidence_and_explains_a_shorter_deck(source):
@@ -140,8 +141,10 @@ def test_review_repairs_once_and_refuses_persistently_unsupported_content(source
         if schema.__name__=='SlideReview':return json.dumps(dict(slides=[dict(slide_number=i+1,supported=False,assessment='Unsupported outcome.') for i in range(3)],issues=['Slide 1 invents an outcome.']))
         return json.dumps(value)
     monkeypatch.setattr(gemini,'generate',generate)
-    with pytest.raises(ValueError,match='after one repair'):
+    with pytest.raises(slide_authoring.SlideQualityError,match='after one repair') as error:
         slide_authoring.generate(request,[dict(document_id=source['id'],id='p2',text='Evidence')],lambda draft:None,lambda p:None)
+    assert error.value.stage == 'source_review'
+    assert 'Unsupported outcome' not in str(error.value)
     assert calls==['DeckOutline','SlideDeckDraft','SlideReview','SlideDeckDraft','SlideReview']
 
 

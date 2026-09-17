@@ -181,7 +181,8 @@ def mutate(job_id, action, revision, draft=None):
 def quotation_text(text):
     """Ignore PDF line wrapping while preserving Latin word boundaries and punctuation."""
     text = re.sub(r'\s+', ' ', text).strip()
-    return re.sub(r'(?<=[\u3400-\u9fff\uf900-\ufaff]) +(?=[\u3400-\u9fff\uf900-\ufaff])', '', text)
+    cjk = r'\u3400-\u9fff\uf900-\ufaff，。！？；：、（）「」『』【】'
+    return re.sub(fr'(?<=[{cjk}]) +| +(?=[{cjk}])', '', text)
 
 
 def validate_draft(draft, blocks, kind=None):
@@ -478,6 +479,8 @@ def run(job_id):
         return
     except Exception as exc:
         logger.warning('job_failed id=%s kind=%s', job.id, type(exc).__name__)
+        if isinstance(exc, slide_authoring.SlideQualityError):
+            logger.warning('slide_quality_failed id=%s stage=%s', job.id, exc.stage)
         if isinstance(exc, ValidationError):
             logger.warning('job_invalid_fields id=%s fields=%s', job.id,
                 [{'field':'.'.join(map(str,e['loc'])), 'type':e['type']} for e in exc.errors(include_input=False,include_context=False)][:20])
@@ -485,6 +488,8 @@ def run(job_id):
             active = db.get(store.Job, job.id)
             if active and active.status == 'running' and active.attempt == job.attempt:
                 active.status, active.error = 'failed', f'{type(exc).__name__}: task could not be completed; review input and retry.'
+                if isinstance(exc, slide_authoring.SlideQualityError):
+                    active.error = str(exc)
                 active.revision += 1
                 close_publication(db, active, type(exc).__name__)
                 db.commit()
