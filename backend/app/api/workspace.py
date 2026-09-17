@@ -109,8 +109,12 @@ def preview_draft(job_id: str, body: JobAction):
     try:
         draft = ArtifactDraft.model_validate(body.draft)
         _, blocks = jobs.inputs(ArtifactRequest.model_validate(job.payload), require_user())
-        jobs.validate_draft(draft, blocks)
-    except ValueError:
+        jobs.validate_draft(draft, blocks, job.kind)
+        if draft.slides:
+            renderers.pptx(draft.model_dump(), job.payload['language'], job.payload['sources'])
+    except ValueError as exc:
+        if 'readable slide area' in str(exc) or 'Shorten chart category' in str(exc):
+            raise HTTPException(422, 'Slide text exceeds readable layout') from None
         raise HTTPException(422, 'Check draft fields and original citations') from None
     return {'slide_count':len(renderers.slide_plan(draft.model_dump(), job.payload['sources'])) if job.kind=='pptx' else None}
 

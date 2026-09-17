@@ -48,6 +48,8 @@ PYTHONPATH=backend .venv/bin/python backend/scripts/dev_server.py
 
 每人每小時預設 10 個產出任務，證據上限 100,000 字元。任務預設保存 24 小時，下載再驗證原文權限與版本；使用者可取消、重試、刪除。Cloud Tasks 處理不依賴瀏覽器存活，定期清理移除到期任務與檔案；GCS `jobs/` 一日 lifecycle 為額外清理機制，實際刪除可能延後，下載權限在到期時立即終止。一般 logs 不保存完整原文、對話或譯文。
 
+新投影片任務會載入版本化的 [research-slides skill](backend/app/skills/research-slides/SKILL.md)，依序規劃敘事、製作逐頁內容、檢查來源與版面，必要時修正一次。提供重點說明、比較表、流程、引文分析與數據圖五種可編輯版型；每頁有核心訊息、內容、講者備註及來源，區分資料依據、推論和建議。頁數包含所有投影片，證據不足時會減少頁數並說明原因。使用者可逐頁改寫與調整順序，確認後匯出；既有草稿和已完成檔案保留原有格式。細節見 [渲染與品質檢查](docs/rendering-dependencies.md)。
+
 ## MCP
 
 Streamable HTTP 端點為 `/mcp`，也保留 `/mcp/sse`。在研究網站 Google 登入後，從「MCP」面板建立**個人一小時憑證**，設定 `Authorization: Bearer <token>`。資料庫只存雜湊，新建會撤銷前一個，面板可隨時撤銷；每次請求都套用當前登入名單與角色。憑證不共用、不寫入版本控制、不貼入模型對話。

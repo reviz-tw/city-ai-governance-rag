@@ -27,6 +27,30 @@ export const PANEL_COPY = {
   index:['切片發布','Chunk publication','チャンクの公開','Publication des segments','Publicación de fragmentos','Публикация фрагментов'],
   createPdf:['產出 PDF','Create PDF','PDF を作成','Créer un PDF','Crear PDF','Создать PDF'],
   createSlides:['產出投影片','Create slides','スライドを作成','Créer une présentation','Crear presentación','Создать слайды'],
+  slideDeckPlan:['共 {count} 頁，引用附於各頁，詳細說明保留在講者備註。','{count} slides, with citations on each slide and detail in speaker notes.','全 {count} 枚。各スライドに出典、発表者ノートに詳細を記載します。','{count} diapositives, avec sources sur chaque page et détails dans les notes.','{count} diapositivas, con fuentes en cada página y detalles en las notas.','{count} слайдов: ссылки на каждом, подробности в заметках.'],
+  slideReviewIntro:['逐頁檢查重點、證據與版型。可修改內容及順序；過長或不符合引用的內容需先修正才能產出。','Review each slide’s message, evidence and layout. Edit content and order; oversized text or invalid citations must be corrected before export.','各スライドの要点、根拠、レイアウトを確認してください。内容と順序を編集できます。長すぎる文章や不正な引用は出力前に修正してください。','Vérifiez le message, les sources et la disposition. Modifiez le contenu et l’ordre ; corrigez les textes trop longs ou citations invalides avant export.','Revise mensaje, fuentes y diseño. Edite contenido y orden; corrija textos extensos o citas inválidas antes de exportar.','Проверьте смысл, источники и макет. Измените содержание и порядок; исправьте слишком длинный текст и неверные ссылки до экспорта.'],
+  slideTextTooLong:['部分文字超出版面可讀範圍。請縮短標題、重點或表格文字，將補充說明移至講者備註。','Some text exceeds the readable layout. Shorten titles, points or table cells and move supporting detail to speaker notes.','一部の文章がレイアウトに収まりません。見出し、要点、表を短くし、詳細は発表者ノートへ移してください。','Certains textes dépassent la mise en page lisible. Raccourcissez titres, points ou cellules et placez les détails dans les notes.','Algunos textos no caben de forma legible. Acorte títulos, puntos o celdas y pase los detalles a las notas.','Часть текста не помещается. Сократите заголовки, пункты или ячейки и перенесите подробности в заметки.'],
+  audienceGoal:['希望聽眾理解什麼','What should the audience understand?','聞き手に伝えること','Ce que le public doit comprendre','Qué debe comprender el público','Что должна понять аудитория'],
+  slideNumber:['第 {number} 頁','Slide {number}','スライド {number}','Diapositive {number}','Diapositiva {number}','Слайд {number}'],
+  slideTitle:['本頁標題','Slide title','スライドの題名','Titre de la diapositive','Título de la diapositiva','Заголовок слайда'],
+  takeaway:['本頁要點','Main takeaway','要点','Message principal','Idea principal','Главная мысль'],
+  claimType:['內容性質','Type of claim','内容の区分','Nature du propos','Tipo de afirmación','Тип утверждения'],
+  claim_evidence:['資料依據','Evidence','根拠','Constats','Evidencia','Данные'],
+  claim_inference:['推論','Inference','推論','Interprétation','Inferencia','Вывод'],
+  claim_recommendation:['建議','Recommendation','提案','Recommandation','Recomendación','Рекомендация'],
+  layout_briefing:['重點說明','Briefing','要点説明','Synthèse','Síntesis','Основные положения'],
+  layout_comparison:['比較表','Comparison','比較表','Comparaison','Comparación','Сравнение'],
+  layout_process:['流程','Process','手順','Processus','Proceso','Процесс'],
+  layout_evidence:['引文分析','Source analysis','引用の分析','Analyse de source','Análisis de fuente','Анализ источника'],
+  layout_chart:['數據圖表','Data chart','データ図表','Graphique de données','Gráfico de datos','Диаграмма данных'],
+  sourceQuote:['原文引句','Original quotation','原文の引用','Citation originale','Cita original','Исходная цитата'],
+  speakerNotes:['講者備註','Speaker notes','発表者ノート','Notes de présentation','Notas del presentador','Заметки докладчика'],
+  pointLabel:['重點 {number} 的標題','Point {number} label','項目 {number} の見出し','Titre du point {number}','Título del punto {number}','Заголовок пункта {number}'],
+  pointDetail:['重點 {number} 的說明','Point {number} explanation','項目 {number} の説明','Explication du point {number}','Explicación del punto {number}','Пояснение пункта {number}'],
+  columnNumber:['第 {number} 欄標題','Column {number} heading','列 {number} の見出し','En-tête de colonne {number}','Encabezado de columna {number}','Заголовок столбца {number}'],
+  tableCell:['第 {row} 列第 {column} 欄','Row {row}, column {column}','行 {row}、列 {column}','Ligne {row}, colonne {column}','Fila {row}, columna {column}','Строка {row}, столбец {column}'],
+  moveSlideUp:['將第 {number} 頁往前移','Move slide {number} earlier','スライド {number} を前へ','Avancer la diapositive {number}','Adelantar diapositiva {number}','Переместить слайд {number} раньше'],
+  moveSlideDown:['將第 {number} 頁往後移','Move slide {number} later','スライド {number} を後へ','Reculer la diapositive {number}','Retrasar diapositiva {number}','Переместить слайд {number} позже'],
   slidesCreate:['另存 Google Slides','Save to Google Slides','Google スライドに保存','Enregistrer dans Google Slides','Guardar en Google Slides','Сохранить в Google Презентациях'],
   slidesOpen:['在 Google Slides 開啟','Open in Google Slides','Google スライドで開く','Ouvrir dans Google Slides','Abrir en Google Slides','Открыть в Google Презентациях'],
   slidesCreating:['正在儲存至 Google Slides……','Saving to Google Slides…','Google スライドに保存中…','Enregistrement dans Google Slides…','Guardando en Google Slides…','Сохранение в Google Презентациях…'],
@@ -156,6 +180,7 @@ export function panelText(lang:InterfaceLanguage, key:PanelKey, params:Record<st
   return PANEL_COPY[key][indexes[lang]].replace(/\{(\w+)\}/g,(_,name)=>String(params[name]??`{${name}}`));
 }
 export function panelError(error:unknown):PanelKey {
+  if (/Slide text exceeds readable layout|readable slide area|Shorten chart category/.test(String((error as Error)?.message||''))) return 'slideTextTooLong';
   const status=(error as {status?:number})?.status;
   return ({401:'expired',403:'denied',404:'missing',409:'conflict',413:'tooLarge',415:'invalid',422:'invalid',429:'rateLimit',503:'unavailable'} as Record<number,PanelKey>)[status!] || 'error';
 }

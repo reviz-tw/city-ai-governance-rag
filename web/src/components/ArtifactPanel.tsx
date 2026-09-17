@@ -6,6 +6,7 @@ import {useLocale} from '../lib/locale';
 import {answerEvidence} from '../lib/answer-artifact';
 import {ChatMessage} from '../types';
 import {GoogleSlidesExport} from './GoogleSlidesExport';
+import {SlideDraftEditor} from './SlideDraftEditor';
 
 export function JobView({id, onClose}: {id: string; onClose: () => void}) {
   const {t, error: errorText, label} = useLocale();
@@ -54,10 +55,11 @@ export function JobView({id, onClose}: {id: string; onClose: () => void}) {
       {job.error && <div role="alert"><p>{t('error')}</p><details><summary>{t('details')}</summary><p>{job.error}</p></details></div>}
       {draft && job.status === 'awaiting_review' && <>
         <p>{t('reviewDraft')}</p>
-        {job.kind==='pptx'&&<p>{t('slidePlan',{count:preview?.slide_count ?? t('loading')})}</p>}
+        {job.kind==='pptx'&&<p>{t(draft.slides?.length?'slideDeckPlan':'slidePlan',{count:preview?.slide_count ?? t('loading')})}</p>}
         <label>{t('title')}<input value={draft.title} onChange={e => setDraft({...draft, title: e.target.value})}/></label>
         <label>{t('summary')}<textarea value={draft.summary} onChange={e => setDraft({...draft, summary: e.target.value})}/></label>
-        {draft.sections.map((s: any, i: number) => <div key={i}>
+        {!!draft.slides?.length && <SlideDraftEditor draft={draft} onChange={setDraft}/>}
+        {!draft.slides?.length && draft.sections.map((s: any, i: number) => <div key={i}>
           <input aria-label={t('sectionTitle')} value={s.heading} onChange={e => setDraft({...draft, sections: draft.sections.map((v: any,j: number) => j === i ? {...v, heading:e.target.value}:v)})}/>
           <textarea aria-label={t('sectionBody')} value={s.body} onChange={e => setDraft({...draft, sections: draft.sections.map((v: any,j: number) => j === i ? {...v, body:e.target.value}:v)})}/>
           <small>{s.citations.map((c: any) => `${c.document_id}/${c.block_id}`).join(' · ')}</small>

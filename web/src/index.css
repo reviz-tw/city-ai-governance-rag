@@ -168,6 +168,13 @@
 .google-slides-export { margin: 20px 0; padding: 20px; border: 1px solid var(--color-divider); border-radius: 12px; background: oklch(0.980 0.006 290); }
 .google-slides-export h3 { margin: 0 0 8px; }
 .google-slides-export small { color: oklch(0.455 0.014 290); }
+.slide-draft { padding: 20px 0; border-top: 1px solid var(--color-divider); }
+.slide-draft-heading { display: flex; align-items: center; gap: 6px; }
+.slide-draft-heading h3 { flex: 1; }
+.slide-point { margin: 14px 0; }
+.slide-table-scroll { overflow-x: auto; }
+.slide-table-scroll table { width: 100%; table-layout: fixed; min-width: 440px; }
+.slide-table-scroll textarea { min-height: 100px; }
 .panel-body label { display: block; margin: 16px 0; font-size: 14px; }
 .panel-body input:not([type=checkbox]), .panel-body textarea, .panel-body select { display: block; width: 100%; padding: 10px 14px; margin-top: 8px; border: 1px solid var(--color-input-border); border-radius: 10px; background: #fff; color: var(--color-text); font-size: 14px; }
 .panel-body textarea { min-height: 110px; line-height: 1.8; resize: vertical; }

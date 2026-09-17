@@ -94,6 +94,8 @@ def pdf(draft, language, sources):
 
 
 def slide_plan(draft, sources):
+    if draft.get('slides'):
+        return draft['slides']
     pages=[]
     def add(title,content,refs=''):
         limit=450 if any(cjk_character(char) for char in content) else 800
@@ -112,6 +114,9 @@ def slide_plan(draft, sources):
 
 
 def pptx(draft, language, sources):
+    if draft.get('slides'):
+        from app.services.slide_rendering import render
+        return render(draft, language, sources)
     deck = Presentation()
     deck.slide_width, deck.slide_height = Inches(13.333), Inches(7.5)
     def slide(title, content, refs=''):
