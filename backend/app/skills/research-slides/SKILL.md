@@ -14,6 +14,7 @@ Create a presentation that helps the specified audience understand the selected 
 - Preserve the strength of each statement. "May", "should", "preferably" and "must" are different. Do not turn a preference for self-hosting into a prohibition on external services, or assume an open-source model is disconnected from the Internet. Apply this check to table cells, takeaways and speaker notes as well as body text.
 - Keep the selected answer's central question and useful distinctions. Do not replace it with a generic overview of AI governance.
 - If the available passages cannot support the requested breadth, create fewer substantive slides and explain the gap in `coverage_note`. Do not invent cases, statistics, chronology, causal links or decorative comparisons to fill pages.
+- Scope absence claims to the supplied passages. "The selected excerpt does not include an implementation procedure" does NOT mean "the full guideline has no procedure." Never generalize missing retrieval evidence into a defect in the complete document, including in titles, tables, summaries and notes. Recommend checking the full source when needed.
 - Quotation text stays verbatim in its source language. Explain it in the requested output language. Numeric charts require comparable measurements, exact quotations, the same original unit and period.
 
 ## Plan the story

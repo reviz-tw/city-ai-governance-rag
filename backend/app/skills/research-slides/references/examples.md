@@ -31,6 +31,10 @@ Synthetic evidence: "The checklist records vendor, model and version."
 
 One useful briefing page can distinguish supplier identity from model/version traceability and explain what the form records. A short source quote can support it. Do not stretch this into six pages about performance, audits, procurement, costs and governance maturity: those topics are absent. Set `coverage_note` to explain why the requested six-page scope cannot be supported.
 
+## An excerpt is not the complete document
+
+Synthetic evidence: a selected paragraph lists accountability and privacy principles. Say "This excerpt lists principles; consult the full guideline for implementation details." Do not say "The guideline lacks a checklist" or "The city has no review procedure": the excerpt cannot establish either claim. This applies equally to limitations and speaker notes.
+
 ## Numbers must retain their meaning
 
 Synthetic evidence: "In 2026, 20 applications were reviewed by Team A and 12 applications were reviewed by Team B."
