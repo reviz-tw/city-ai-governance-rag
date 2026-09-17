@@ -3,12 +3,12 @@ import {ReactNode, useEffect, useRef, useState} from 'react';
 import {api, apiList, jsonRequest} from '../lib/api';
 import {JobView} from './ArtifactPanel';
 import {useLocale} from '../lib/locale';
-import {splitChunk} from '../lib/chunks';
+import {ChunkDraftEditor} from './ChunkDraftEditor';
 
-function LibraryFrame({standalone, onClose, children}: {standalone:boolean; onClose:()=>void; children:ReactNode}) {
+function LibraryFrame({standalone, editing, onClose, children}: {standalone:boolean; editing:boolean; onClose:()=>void; children:ReactNode}) {
   const {t} = useLocale();
-  if (!standalone) return <WorkspacePanel title={t('library')} onClose={onClose}>{children}</WorkspacePanel>;
-  return <main className="admin-library"><header className="admin-library-header"><div><p className="eyebrow">City AI governance · Admin</p><h1>{t('adminTitle')}</h1></div><nav><a href="/">{t('returnResearch')}</a><a href="/admin/tools/">{t('aiTools')}</a></nav></header>{children}</main>;
+  if (!standalone) return <WorkspacePanel title={t('library')} className={editing?'chunk-editor-panel':''} onClose={onClose}>{children}</WorkspacePanel>;
+  return <main className={`admin-library ${editing?'is-editing':''}`}><header className="admin-library-header"><div>{!editing&&<p className="eyebrow">City AI governance · Admin</p>}<h1>{t('adminTitle')}</h1></div><nav><a href="/">{t('returnResearch')}</a><a href="/admin/tools/">{t('aiTools')}</a></nav></header>{children}</main>;
 }
 
 export function Library({editor, admin=false, standalone=false, onClose}: {editor:boolean; admin?:boolean; standalone?:boolean; onClose:()=>void}) {
@@ -34,9 +34,17 @@ export function Library({editor, admin=false, standalone=false, onClose}: {edito
   const [language,setLanguage] = useState('');
   const [city,setCity] = useState('');
   const [chunkSize,setChunkSize] = useState(1500);
-  const loadDoc=(value:any)=>{setDoc(value);setSavedDraft(JSON.stringify(value.draft));setDiff('');setDiffHash('');setIndexed(null);};
+  const [reflowUndo,setReflowUndo] = useState<{before:any[];after:string}|null>(null);
+  const [reflowMessage,setReflowMessage] = useState('');
+  const loadDoc=(value:any)=>{setDoc(value);setSavedDraft(JSON.stringify(value.draft));setDiff('');setDiffHash('');setIndexed(null);setReflowUndo(null);setReflowMessage('');};
   useEffect(()=>{if(doc)editorHeading.current?.focus();},[doc?.id]);
   const dirty=doc && JSON.stringify(doc.draft)!==savedDraft;
+  useEffect(()=>{
+    if(!dirty)return;
+    const warn=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue='';};
+    window.addEventListener('beforeunload',warn);
+    return ()=>window.removeEventListener('beforeunload',warn);
+  },[dirty]);
   useEffect(()=>setDiffHash(''),[doc]);
   const refresh = async () => {
     setLoading(true);
@@ -66,8 +74,8 @@ export function Library({editor, admin=false, standalone=false, onClose}: {edito
   const historical=legacy.filter(item=>!docs.some(d=>d.legacy_filename===item.filename) && matches(item.filename));
   const pending=doc?.index_status==='pending';
   if(job) return <JobView id={job} onClose={()=>{setJob('');void refresh();if(doc)void run(async()=>loadDoc(await api(`/api/library/${doc.id}`)));}}/>;
-  return <LibraryFrame standalone={standalone} onClose={onClose}>
-    <p className="panel-intro">{t('libraryIntro')}</p>
+  return <LibraryFrame standalone={standalone} editing={!!doc} onClose={onClose}>
+    {!doc&&<p className="panel-intro">{t('libraryIntro')}</p>}
     {error && <p role="alert">{error}</p>}
     <fieldset disabled={busy} className="library-controls">
     {!doc && <>
@@ -89,10 +97,16 @@ export function Library({editor, admin=false, standalone=false, onClose}: {edito
     </>}
     {doc?.editable && editor && <section className="chunk-editor" aria-label={t('editor')}><button className="btn btn-secondary" onClick={()=>dirty?setConfirmation('leave'):setDoc(null)}>{t('back')}</button><h2 tabIndex={-1} ref={editorHeading}>{doc.title} · {t('draftRevision',{revision:doc.draft_revision})}</h2><p>{label(doc.index_status)} · {t('publishedVersion',{version:doc.published_version})}</p>
       {doc.warnings?.length>0 && <p>{t('extractionNote')}</p>}
-      <div className="parallel-text"><div><h3>{t('extracted')}</h3>{doc.blocks?.map((b:any)=><p key={b.id} dir="auto">{b.id} · {t('page')} {b.page??'—'} · {b.text}</p>)}</div><div><h3>{t('draftChunks',{count:doc.draft.length})}</h3>{doc.draft.map((c:any,i:number)=><div key={c.id} className="chunk-card"><small>{c.id} · {c.refs.map((r:any)=>`${r.block_id} (${t('page')} ${r.page??'—'})`).join(', ')}</small><label>{t('chunkContent',{number:i+1})}<textarea value={c.content} dir="auto" onChange={e=>mutateChunks(doc.draft.map((v:any,j:number)=>i===j?{...v,content:e.target.value}:v))}/></label>
-        <button className="btn" disabled={i===doc.draft.length-1} onClick={()=>{const next=doc.draft[i+1];const merged={...c,content:c.content+'\n\n'+next.content,refs:[...c.refs,...next.refs]};mutateChunks([...doc.draft.slice(0,i),merged,...doc.draft.slice(i+2)]);}}>{t('merge')}</button>
-        <button className="btn" disabled={c.content.trim().length<2} onClick={()=>{const parts=splitChunk(c,doc.blocks,crypto.randomUUID());if(parts)mutateChunks([...doc.draft.slice(0,i),...parts,...doc.draft.slice(i+1)]);}}>{t('split')}</button>
-      </div>)}</div></div>
+      <div className="chunk-reflow-tools"><button className="btn btn-secondary" onClick={()=>run(async()=>{
+        const result=await api(`/api/library/${doc.id}/preview-reflow`,jsonRequest({revision:doc.draft_revision,chunks:doc.draft}));
+        if(result.changed){setReflowUndo({before:doc.draft,after:JSON.stringify(result.chunks)});mutateChunks(result.chunks);}
+        setReflowMessage(t(result.changed?'reflowDone':'reflowUnchanged',{count:result.changed}));
+      })}>{t('reflowChunks')}</button>
+        {reflowUndo&&JSON.stringify(doc.draft)===reflowUndo.after&&<button className="btn" onClick={()=>{mutateChunks(reflowUndo.before);setReflowUndo(null);setReflowMessage('');}}>{t('undoReflow')}</button>}
+        <small>{t('reflowHint')}</small>
+      </div>
+      {reflowMessage&&<p role="status">{reflowMessage}</p>}
+      <ChunkDraftEditor key={doc.id} chunks={doc.draft} blocks={doc.blocks||[]} onChange={mutateChunks}/>
       <div className="library-toolbar"><label>{t('chunkSize')}<input type="number" min="100" max="5000" value={chunkSize} onChange={e=>setChunkSize(Number(e.target.value))}/></label><button className="btn" disabled={!Number.isInteger(chunkSize)||chunkSize<100||chunkSize>5000} onClick={()=>setConfirmation('reset')}>{t('rechunk')}</button></div>
       <button className="btn" onClick={()=>save()}>{t('saveDraft')}</button>
       {dirty&&<p role="status">{t('unsaved')}</p>}

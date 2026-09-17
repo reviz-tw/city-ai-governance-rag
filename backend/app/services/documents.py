@@ -12,6 +12,7 @@ from sqlalchemy import select
 from app.services import store
 from app.services.auth import User, require_user, require_editor
 from app.services.languages import normalize_language, detect
+from app.services.text_layout import reflow
 
 
 def can_read(document: store.Document, user: User):
@@ -72,10 +73,13 @@ def extract(data: bytes, filename: str):
     return blocks, warnings
 
 
-def baseline(blocks, limit=1500):
+def baseline(blocks, limit=1500, *, reflow_pdf=False):
     chunks = []
     for block in blocks:
         text = block['text']
+        offsets = list(range(len(text)))
+        if reflow_pdf and block.get('kind') not in {'table', 'heading', 'code'}:
+            text, offsets = reflow(text)
         start = 0
         while start < len(text):
             end = min(start + limit, len(text))
@@ -88,7 +92,7 @@ def baseline(blocks, limit=1500):
             value = text[start:end]
             if value.strip():
                 chunks.append(dict(id=f'c{len(chunks)+1}', order=len(chunks), content=value,
-                                   refs=[dict(block_id=block['id'], start=start, end=end, page=block['page'])],
+                                   refs=[dict(block_id=block['id'], start=offsets[start], end=offsets[end-1]+1, page=block['page'])],
                                    algorithm='paragraph-v1'))
             start = end
     # Pack short adjacent paragraphs while retaining exact original source ranges.
@@ -99,6 +103,9 @@ def baseline(blocks, limit=1500):
             packed[-1]['refs'].extend(chunk['refs'])
         else:
             packed.append(dict(chunk,id=f'c{len(packed)+1}',order=len(packed),algorithm='paragraph-v2'))
+    if reflow_pdf:
+        for chunk in packed:
+            chunk['algorithm'] = 'pdf-reflow-v1'
     return packed
 
 
@@ -114,7 +121,7 @@ def create(data: bytes, filename: str, mime: str, metadata: dict, cleaned_text: 
     document_id = uuid.uuid4().hex
     key = f'managed-originals/{document_id}/{hashlib.sha256(data).hexdigest()}/{Path(filename).name}'
     store.put_bytes(key, data, mime)
-    draft = baseline(blocks)
+    draft = baseline(blocks, reflow_pdf=Path(filename).suffix.lower() == '.pdf')
     if cleaned_text is not None and cleaned_text.strip():
         # Human cleaned text is a draft; the extraction remains the immutable source.
         draft = baseline([dict(id='cleaned',text=cleaned_text,page=None)])
@@ -179,7 +186,7 @@ def register_legacy(result):
                              original_key=link, original_hash=hashlib.sha256(data).hexdigest(),
                              mime='application/pdf' if filename.lower().endswith('.pdf') else 'application/octet-stream',
                              metadata_json=meta, blocks=blocks, extraction_warnings=warnings,
-                             draft=baseline(blocks), index_status='legacy-index', published_version=0))
+                             draft=baseline(blocks, reflow_pdf=filename.lower().endswith('.pdf')), index_status='legacy-index', published_version=0))
         db.commit()
     return identifier
 

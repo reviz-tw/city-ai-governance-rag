@@ -74,6 +74,21 @@ def test_reader_cannot_edit_or_publish_shared_document(client, source):
     assert not value['editable'] and 'draft' not in value
     assert client.post(path + '/draft', json={'revision': value['draft_revision'], 'reset': True}, headers=HEADERS).status_code == 403
     assert client.post(path + '/publish', json={'revision': value['draft_revision'], 'reviewed_diff': 'x'}, headers=HEADERS).status_code == 403
+    assert client.post(path + '/preview-reflow', json={'revision': value['draft_revision'], 'chunks': []}, headers=HEADERS).status_code == 403
+
+
+def test_editor_can_preview_reflow_but_stale_or_invalid_ranges_are_rejected(client, source):
+    login(client, 'editor')
+    path = '/api/library/' + source['id']
+    doc = client.get(path).json()
+    doc['draft'][0]['content'] = '機關導入人工智慧時，\n應保留人工覆核。'
+    body = {'revision':doc['draft_revision'], 'chunks':doc['draft']}
+    result = client.post(path + '/preview-reflow', json=body, headers=HEADERS)
+    assert result.status_code == 200 and result.json()['changed'] == 1
+    assert client.get(path).json()['draft_revision'] == doc['draft_revision']
+    assert client.post(path + '/preview-reflow', json={**body, 'revision':-1}, headers=HEADERS).status_code == 409
+    body['chunks'][0]['refs'][0]['page'] = 999
+    assert client.post(path + '/preview-reflow', json=body, headers=HEADERS).status_code == 422
 
 
 def test_admin_opens_historical_draft_without_overwriting_existing_edits(client, monkeypatch):

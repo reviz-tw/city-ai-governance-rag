@@ -43,13 +43,33 @@ def save(document_id, revision, chunks, reset=False, chunk_size=1500):
         doc = db.scalar(select(store.Document).where(store.Document.id==document_id).with_for_update())
         if doc.draft_revision != revision:
             raise HTTPException(409, 'Draft changed; refresh before saving')
-        chunks = documents.baseline(doc.blocks, chunk_size) if reset else chunks
+        chunks = documents.baseline(doc.blocks, chunk_size, reflow_pdf=doc.mime == 'application/pdf' or doc.original_key.lower().endswith('.pdf')) if reset else chunks
         validate(chunks, doc.blocks)
         doc.draft, doc.draft_revision = chunks, doc.draft_revision+1
         db.add(store.DraftRevision(id=f'{doc.id}:{doc.draft_revision}', document_id=doc.id,
                revision=doc.draft_revision,chunks=chunks,operator=require_user().email))
         db.commit()
         return documents.describe(doc, True)
+
+
+def preview_reflow(document_id, revision, values):
+    """Preview the current editor contents without saving or publishing them."""
+    from app.services.text_layout import reflow
+    doc = documents.get(document_id, edit=True)
+    if doc.draft_revision != revision:
+        raise HTTPException(409, 'Draft changed; refresh before saving')
+    validate(values, doc.blocks)
+    protected = {b['id'] for b in doc.blocks if b.get('kind') in {'table', 'code'}}
+    result, changed = [], 0
+    for chunk in values:
+        content = chunk['content']
+        if not any(r['block_id'] in protected for r in chunk['refs']):
+            content, _ = reflow(content)
+        changed += content != chunk['content']
+        # Reflow is an edit; keep the original ranges, never invent new offsets.
+        result.append({**chunk, 'content': content})
+    validate(result, doc.blocks)
+    return {'chunks': result, 'changed': changed}
 
 
 def diff(document_id, language='zh'):

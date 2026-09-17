@@ -161,6 +161,14 @@ def save_draft(document_id: str, body: ChunkDraftRequest):
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
 
+@router.post('/library/{document_id}/preview-reflow')
+def preview_reflow(document_id: str, body: ChunkDraftRequest):
+    from app.services import chunks
+    try:
+        return chunks.preview_reflow(document_id, body.revision, body.chunks)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+
 @router.get('/library/{document_id}/diff')
 def chunk_diff(document_id: str, language: str = 'zh'):
     from app.services import chunks
