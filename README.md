@@ -61,12 +61,16 @@ Streamable HTTP 端點為 `/mcp`，也保留 `/mcp/sse`。在研究網站 Google
 ## 測試與部署
 
 ```bash
-PYTHONPATH=backend .venv/bin/pytest -q backend/tests
 cd web
+npm ci
 npm test
 npm run build
+cd ..
+PYTHONPATH=backend .venv/bin/pytest -q backend/tests
 ```
 
-Python 相依以 `requirements.in` 為輸入，`requirements.txt` 鎖定全部直接／間接版本；使用 uv 0.8.22、Python 3.12 universal compile 更新。`.github/workflows/test.yml` 與容器建置執行測試。
+先建置前端再執行後端測試；Admin 整合測試會透過 FastAPI 讀取實際的 `web/dist`，乾淨 checkout 未建置時 `/admin/` 會回傳 404。GitHub Actions 與容器建置皆採用這個順序。
 
-`infra/cloudbuild.verify.yaml` 僅建置驗證。`infra/cloudbuild.yaml` 建置、推送並部署 `candidate` 標籤，`--no-traffic` 保留既有流量；不是 push main 後自動切換服務。新模型為 Vertex `gemini-3.7-flash`／清理 `gemini-3.5-flash-lite`、`global`，沒有跨認證來源的隱性 fallback。持續計費資源、切換及回復方式見 [部署方案](docs/deployment-plan.md)。
+Python 相依以 `requirements.in` 為輸入，`requirements.txt` 鎖定全部直接／間接版本；使用 uv 0.8.22、Python 3.12 universal compile 更新。
+
+`infra/cloudbuild.verify.yaml` 僅建置驗證。`infra/cloudbuild.yaml` 建置、推送並部署到固定的 Cloud Run 服務；先以 `candidate` 標籤與 `--no-traffic` 保留既有流量，再由 `verify_deployment.py` 驗證健康狀態、驗證設定與 Admin，通過後將流量切換到新版本，並確認服務網址未改變。新模型為 Vertex `gemini-3.7-flash`／清理 `gemini-3.5-flash-lite`、`global`，沒有跨認證來源的隱性 fallback。持續計費資源、切換及回復方式見 [部署方案](docs/deployment-plan.md)。
