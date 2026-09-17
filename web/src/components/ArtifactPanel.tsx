@@ -5,6 +5,7 @@ import {CONTENT_LANGUAGES} from '../lib/languages';
 import {useLocale} from '../lib/locale';
 import {answerEvidence} from '../lib/answer-artifact';
 import {ChatMessage} from '../types';
+import {GoogleSlidesExport} from './GoogleSlidesExport';
 
 export function JobView({id, onClose}: {id: string; onClose: () => void}) {
   const {t, error: errorText, label} = useLocale();
@@ -72,6 +73,7 @@ export function JobView({id, onClose}: {id: string; onClose: () => void}) {
         {job.draft.source_versions?.map((s:any)=><p key={s.id}><a href={`/api/library/${s.id}/original`}>{s.title} · {t('original')}</a><small> · {s.version.slice(0,12)}</small></p>)}
         {job.draft.blocks?.map((b: any) => <div className="parallel-text" key={b.id}><div dir="auto"><small>{b.id} · {b.page ?? '—'}</small><BlockText text={b.original} cells={b.original_cells}/></div><div dir="auto"><BlockText text={b.text} cells={b.cells}/>{b.ambiguity && <p>{b.ambiguity}</p>}</div></div>)}
       </>}
+      {job.status === 'completed' && job.kind === 'pptx' && job.result?.files && <GoogleSlidesExport key={`${job.id}:${job.revision}`} job={job}/>}
       {job.status === 'completed' && job.result?.files?.map((file: any) => <div key={file.name}>
         <a className="btn" href={`/api/artifacts/${id}/download/${encodeURIComponent(file.name)}`}>{file.name}</a>
         {file.mime === 'image/png' && <img alt={t('chartPreview')} src={`/api/artifacts/${id}/download/${encodeURIComponent(file.name)}`}/>}

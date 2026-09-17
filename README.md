@@ -1,6 +1,6 @@
 # 全球城市 AI 治理研究
 
-React／FastAPI 研究工作區，以 Google 登入、Vertex AI Search 原文檢索、Gemini 問答與共用背景產出服務，提供引用閱讀與段落翻譯、SVG／PNG 圖表、PDF 報告及可編輯 PPTX。前端與 MCP 使用同一套權限、研究 context 和產出服務。
+React／FastAPI 研究工作區，以 Google 登入、Vertex AI Search 原文檢索、Gemini 問答與共用背景產出服務，提供引用閱讀與段落翻譯、SVG／PNG 圖表、PDF 報告、可編輯 PPTX 及 Google Slides。前端與 MCP 使用同一套權限、研究 context 和產出服務。
 
 目前實作與雲端驗收分開追蹤：[TODO](TODO.md)、[實作計畫](docs/implementation-plan.md)、[驗證紀錄](docs/verification.md)。未通過實際 Search 命中驗收前，自訂切片發布保持停用。
 
@@ -23,7 +23,7 @@ PYTHONPATH=backend .venv/bin/python backend/scripts/dev_server.py
 
 ## 登入與文件權限
 
-只取得 Google 基本身分，不要求 Gmail 郵件或 Drive 權限。`LOGIN_ALLOWED_EMAILS` 限制可登入帳號；空名單代表允許所有通過 Google 身分驗證的帳號，**目前 dev 限定兩個已核准帳號**。`ADMIN_EMAILS`、`EDITOR_EMAILS` 決定編輯角色。新文件預設私人，只有擁有者／管理員可修改；分享名單另行管理讀取權。歷史 `documents/` 公開資料集按原有公開範圍登錄，與新私人文件分開處理。
+登入只取得 Google 基本身分；使用者點擊「另存 Google Slides」時才要求 `drive.file`，限本應用建立或使用者選取的檔案。不要求 Gmail 或整個 Drive 的存取權。Google access token 僅保留在瀏覽器記憶體，不傳回後端、不存入資料庫或瀏覽器儲存空間。`LOGIN_ALLOWED_EMAILS` 限制可登入帳號；空名單代表允許所有通過 Google 身分驗證的帳號，**目前 dev 限定兩個已核准帳號**。`ADMIN_EMAILS`、`EDITOR_EMAILS` 決定編輯角色。新文件預設私人，只有擁有者／管理員可修改；分享名單另行管理讀取權。歷史 `documents/` 公開資料集按原有公開範圍登錄，與新私人文件分開處理。
 
 原始檔不可由清理／切片草稿覆寫。每份來源保留雜湊、段落與頁碼；人工切片修改另存版本、差異與操作者。儲存草稿不會發布，每個 Chunk 以標準 Document 匯入，並經 Search 核對全部切片後才切換發布版本。預估等待 10～30 分鐘（依 Vertex 索引狀態），期間維持前版。詳見 [Chunk-as-Document](docs/chunk-as-document.md)。舊 Admin 的本地切片視圖明確標為預覽。
 
@@ -42,7 +42,7 @@ PYTHONPATH=backend .venv/bin/python backend/scripts/dev_server.py
 
 研究介面採「回答＋引用來源」兩欄，預設搜尋所有來源語言；城市可在問題中指定。文件庫入口僅保留於 `/admin/`，按「編輯切片」直接切換到編輯畫面，支援儲存、查看差異與重新送出索引。
 
-每則回答下方提供 PDF／投影片／圖表動作，自動帶入該回答與其引用來源、可定位的原文段落，無須挑選文件。MCP 仍可明確指定回答／對話及 source IDs。建立任務時重新載入有權存取的原始證據。PDF／PPTX／圖表先提供草稿，確認後渲染；投影片頁數依修改後內容重新計算。統計圖的數字、單位、期間與引用必須對應原文，不能由質性文字捏造數據。PPTX 可編輯，PDF 用於預覽；沒有宣稱已整合 Google Slides 原生寫入。
+每則回答下方提供 PDF／投影片／圖表動作，自動帶入該回答與其引用來源、可定位的原文段落，無須挑選文件。MCP 仍可明確指定回答／對話及 source IDs。建立任務時重新載入有權存取的原始證據。PDF／PPTX／圖表先提供草稿，確認後渲染；投影片頁數依修改後內容重新計算。統計圖的數字、單位、期間與引用必須對應原文，不能由質性文字捏造數據。PPTX 可編輯，PDF 用於預覽。完成後可在網頁點擊「另存 Google Slides」，授權後透過 Drive API 將 PPTX 轉成使用者本人 Drive 中的原生簡報，引用和限制隨投影片保留。匯出會重新檢查來源權限與版本、核對 Google 帳號；相同任務版本會先查找既有副本，不覆寫 Google Slides 中的人工修改。轉換後請檢查版面。Google 簡報不受本站 24 小時檔案清理影響，刪除本站任務也不會刪除 Drive 副本。MCP 仍提供 PPTX／PDF 下載，不使用瀏覽器的 Drive 授權。
 
 翻譯保留段落、可擷取表格、數字、來源版本與定位，並排閱讀標示 AI 輔助、非官方譯本。介面僅提供引用段落翻譯，未能精確定位時提供原始文件連結。引用所在的掃描頁面需先 OCR；其他頁的 OCR 警示不阻擋可擷取段落。複雜 PDF 擷取會提示限制。API 仍支援全文翻譯；全文代表選定擷取文字全部完成，不代表圖片、註腳或原版面完整重製。長文分批、可續作；部分成功不標為完整。
 

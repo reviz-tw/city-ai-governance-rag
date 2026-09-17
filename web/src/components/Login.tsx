@@ -1,15 +1,14 @@
 import {useEffect, useRef, useState} from 'react';
 import {api, jsonRequest} from '../lib/api';
-declare global {interface Window {google?: any}}
+import {loadGoogleIdentity} from '../lib/google-identity';
 export function Login({onLogin}: {onLogin: (user: any) => void}) {
   const root = useRef<HTMLDivElement>(null);
   const [error, setError] = useState('');
   useEffect(() => {
     let active = true;
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client'; script.async = true;
-    script.onload = async () => {
+    const initialize = async () => {
       try {
+        await loadGoogleIdentity();
         const config = await api('/api/auth/config');
         if (!active) return;
         if (!config.client_id) {setError('Google 登入尚未設定，請由管理員設定 OAuth Client ID。'); return;}
@@ -19,9 +18,8 @@ export function Login({onLogin}: {onLogin: (user: any) => void}) {
         window.google.accounts.id.renderButton(root.current, {theme:'outline', size:'large', shape:'pill', text:'signin_with', width:Math.min(400, root.current?.clientWidth || 300)});
       } catch (e: any) {setError(e.message);}
     };
-    script.onerror = () => setError('無法載入 Google 登入，請重新整理後重試。');
-    document.head.appendChild(script);
-    return () => {active = false; script.remove();};
+    void initialize();
+    return () => {active = false;};
   }, [onLogin]);
   return <main className="login-page"><div className="login-card">
     <p className="eyebrow">City AI governance</p>
@@ -29,6 +27,6 @@ export function Login({onLogin}: {onLogin: (user: any) => void}) {
     <p className="login-description">用你自己的話提問，回答會附上原始文件。<br/>登入後可閱讀原文、產出報告與投影片。</p>
     <div className="google-signin" ref={root}/>
     {error && <p role="alert">{error}</p>}
-    <p className="login-note">只取得基本身分，不讀取你的信件或雲端檔案。</p>
+    <p className="login-note">登入只取得基本身分。另存 Google Slides 時才會另行詢問雲端檔案授權。</p>
   </div></main>;
 }

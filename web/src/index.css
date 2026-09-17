@@ -165,6 +165,9 @@
 .panel-body h3 { font-size: 17px; margin: 20px 0 12px; }
 .panel-body p { margin: 12px 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.85; }
 .panel-body .panel-intro { margin: 0 0 24px; font-size: 15px; color: oklch(0.455 0.014 290); }
+.google-slides-export { margin: 20px 0; padding: 20px; border: 1px solid var(--color-divider); border-radius: 12px; background: oklch(0.980 0.006 290); }
+.google-slides-export h3 { margin: 0 0 8px; }
+.google-slides-export small { color: oklch(0.455 0.014 290); }
 .panel-body label { display: block; margin: 16px 0; font-size: 14px; }
 .panel-body input:not([type=checkbox]), .panel-body textarea, .panel-body select { display: block; width: 100%; padding: 10px 14px; margin-top: 8px; border: 1px solid var(--color-input-border); border-radius: 10px; background: #fff; color: var(--color-text); font-size: 14px; }
 .panel-body textarea { min-height: 110px; line-height: 1.8; resize: vertical; }

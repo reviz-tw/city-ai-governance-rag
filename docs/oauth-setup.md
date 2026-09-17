@@ -18,7 +18,19 @@
 
 目標對象採「外部／測試」，測試帳號為 `hcchien@gmail.com`、`hcchien@reviz.tw`。後端另以 `LOGIN_ALLOWED_EMAILS` 限制相同帳號，實際限制可登入帳號。Google 的基本身分登入（openid/email/profile）適用測試名單例外，因此不需逐一加入 Google 名單；詳見 https://support.google.com/cloud/answer/15549945?hl=en 。所有 cookie 與 MCP bearer 登入均套用名單。`ADMIN_EMAILS` 決定文件編輯與發布權限，登入本身不授予管理員身分。
 
-只使用基本登入身分與電子郵件，不要求 Gmail 郵件、Google Drive 或其他 API 存取權。原始文件及使用者明確選定的有限對話內容會傳送至專案設定的 Gemini global endpoint；對話不永久存入 session。
+初次登入只使用基本身分與電子郵件，不要求 Drive 權限。原始文件及使用者明確選定的有限對話內容會傳送至專案設定的 Gemini global endpoint；對話不永久存入 session。
+
+## 選用：另存 Google Slides
+
+使用同一個 OAuth Web client。Google Identity Services token model 在使用者點擊匯出時才要求 `https://www.googleapis.com/auth/drive.file`；不用 client secret、授權碼或 refresh token。此範圍僅涵蓋本應用建立或由使用者選取的檔案，不要求完整 `drive`／`presentations` 範圍。短期 access token 只存在瀏覽器記憶體，直接呼叫 Google Drive REST API，不經本站後端。
+
+部署前須啟用 `drive.googleapis.com`，並在 OAuth「資料存取權」宣告 `drive.file`。2026-09-17 已啟用 Drive API，並核對「目標對象」確實包含上述兩個測試帳號；額外的 Drive 授權不適用僅基本登入的測試名單例外。網站仍採外部／測試狀態，尚未開放一般帳號。
+
+完成投影片後，前端重新下載已通過本人及來源 ACL／版本檢查的 PPTX，以 Drive resumable upload 及 `application/vnd.google-apps.presentation` 轉成原生簡報。`about.user.emailAddress` 必須符合目前登入者；`about.importFormats` 必須支援 PowerPoint 轉換。以任務版本的雜湊寫入 `appProperties.cityRagExport`，重試時先搜尋副本，同來源分頁以 Web Locks 避免同時上傳；不自動重試結果不明的寫入。不同裝置同時匯出仍可能建立兩份，沒有宣稱跨裝置 exactly-once。
+
+開啟連結後由使用者在 Google Slides 編輯與分享；本站不修改 Drive 分享權限，刪除任務或 24 小時到期不刪除 Google 副本。若使用者拒絕授權、帳號不符或 Google 不支援轉換，仍可下載 PPTX 與 PDF。
+
+參考：[GIS token model](https://developers.google.com/identity/oauth2/web/guides/use-token-model)、[Drive 檔案轉換](https://developers.google.com/workspace/drive/api/guides/manage-uploads)、[drive.file 最小範圍](https://developers.google.com/workspace/drive/api/guides/api-specific-auth)。
 
 本機使用 `.env.example` 的公開設定，另從環境注入隨機 `AUTH_SESSION_SECRET`。Cloud Run 使用 Secret Manager 注入簽章金鑰與 PostgreSQL 連線字串，並設定持久化 artifact bucket 及 Cloud Tasks。2026-09-16 已在 localhost 及 dev 候選版以 `hcchien@gmail.com` 完成真實 Google 登入；候選版重新載入後仍可存取本人已完成的產出。`hcchien@reviz.tw` 亦已完成候選版真人登入，文件庫顯示新增文件及修正草稿入口；Gmail 帳號為閱讀者。
 
