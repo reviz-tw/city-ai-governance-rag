@@ -294,6 +294,11 @@ def retrieve(query, city=None, languages=None):
                 continue  # A migrated document must never surface stale legacy snippets.
             result['metadata'] = {**result.get('metadata',{}), 'document_id':identifier,
                                   'language':doc.language,'version':doc.original_hash}
+            snippet = ' '.join(s.get('snippet', '') for s in result.get('snippets', []) if isinstance(s, Mapping))
+            result['block_ids'] = documents.cited_passages(doc.blocks, snippet)
+            pages = [b['page'] for b in doc.blocks if b['id'] in result['block_ids'] and b.get('page') is not None]
+            if pages:
+                result.update(page_start=min(pages), page_end=max(pages))
             combined.append(result)
         except Exception as exc:
             logger.warning('source_unavailable kind=%s',type(exc).__name__)
@@ -325,6 +330,7 @@ def prepare_rag(query, city_filter=None, response_language='auto', interface_lan
                       link=res.get('link', ''), snippet=snippet,
                       language=meta.get('language'), version=meta.get('version'),
                       document_id=meta.get('document_id', res['id']),
+                      block_ids=res.get('block_ids') or list(dict.fromkeys(r['block_id'] for r in res.get('refs', []))),
                       chunk_id=res.get('chunk_id'), page_start=res.get('page_start'), page_end=res.get('page_end'))
         sources.append(source)
         blocks.append(dict(citation_id=source['citation_id'], content=snippet, title=res['title']))

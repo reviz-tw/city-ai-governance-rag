@@ -1,4 +1,5 @@
 import hashlib
+import html
 import io
 import re
 import uuid
@@ -191,3 +192,21 @@ def evidence(document_id, user=None):
         raise HTTPException(409, 'Original file changed; re-import and review the new source version')
     # Re-read the authorized original representation, never the AI answer.
     return doc, [dict(**b, document_id=doc.id, version=doc.original_hash) for b in doc.blocks]
+
+
+def cited_passages(blocks, snippet):
+    """Locate only substantial exact source text, never guess from a document title.
+
+    Search snippets can contain markup, layout whitespace and ellipsis gaps.
+    Matching returns complete original paragraph IDs for reading/translation.
+    """
+    plain = html.unescape(re.sub(r'<[^>]+>', '', snippet))
+    fragments = [re.sub(r'\s+', '', part).casefold()
+                 for part in re.split(r'\.{3,}|…+|[。!?！？\n]', plain)]
+    fragments = [part for part in fragments if len(part) >= 16]
+    found = []
+    for block in blocks:
+        text = re.sub(r'\s+', '', block['text']).casefold()
+        if len(text) >= 16 and any(part in text or text in part for part in fragments):
+            found.append(block['id'])
+    return found

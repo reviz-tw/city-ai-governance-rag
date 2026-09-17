@@ -4,14 +4,16 @@ import {ChatMessage, Citation} from '../types';
 import {UIStrings} from '../i18n';
 import {CONTENT_LANGUAGES, InterfaceLanguage} from '../lib/languages';
 import {researchCopy} from '../lib/research-copy';
+import {useLocale} from '../lib/locale';
 import {WorkspacePanel} from './WorkspacePanel';
 
 interface ChatViewProps {
   t: UIStrings; lang: InterfaceLanguage; messages: ChatMessage[]; loading: boolean;
-  onSendMessage: (text: string) => void; onClearHistory: () => void; onOpenSource: (id: string) => void;
+  onSendMessage: (text: string) => void; onClearHistory: () => void; onOpenSource: (citation:Citation, language:string) => void; onArtifact: (kind:string,message:ChatMessage)=>void;
 }
 
-export function ChatView({t, lang, messages, loading, onSendMessage, onClearHistory, onOpenSource}: ChatViewProps) {
+export function ChatView({t, lang, messages, loading, onSendMessage, onClearHistory, onOpenSource, onArtifact}: ChatViewProps) {
+  const {t: text} = useLocale();
   const c = researchCopy(lang);
   const [inputText, setInputText] = useState('');
   const [isComposing, setIsComposing] = useState(false);
@@ -87,7 +89,7 @@ export function ChatView({t, lang, messages, loading, onSendMessage, onClearHist
           {citation.snippet && <span className="citation-snippet" dir="auto">{citation.snippet}</span>}
         </button>
         {selectedCitation === citation.citation_id && <div className="citation-actions">
-          {citation.document_id ? <button className="btn btn-secondary" onClick={() => {setSourcesOpen(false); onOpenSource(citation.document_id!);}}>{c.read}</button> : citation.link && /^https?:\/\//i.test(citation.link) ? <a className="btn btn-secondary" href={citation.link} target="_blank" rel="noreferrer">{c.read}</a> : null}
+          {citation.document_id ? <button className="btn btn-secondary" onClick={() => {setSourcesOpen(false); onOpenSource(citation,sourceMessage?.response_language || (lang==='zh'?'zh-TW':lang));}}>{c.read}</button> : citation.link && /^https?:\/\//i.test(citation.link) ? <a className="btn btn-secondary" href={citation.link} target="_blank" rel="noreferrer">{c.read}</a> : null}
         </div>}
       </article>)}
       <p className="field-hint">{c.sourceHint}</p>
@@ -114,6 +116,7 @@ export function ChatView({t, lang, messages, loading, onSendMessage, onClearHist
               <span className="answer-time">{message.timestamp}</span>
               {!!message.citations?.length && <button className="btn btn-ghost answer-sources" onClick={() => showSources(message)}><BookOpen size={14}/>{t.sourcesHeader} · {message.citations.length}</button>}
               <button className="btn btn-ghost" disabled={!message.content} onClick={() => void copy(message)}>{copiedId === message.id ? <Check size={13}/> : <Copy size={13}/>}{copiedId === message.id ? t.copiedBtn : t.copyBtn}</button>
+              {!message.error && message.citations?.some(c=>c.document_id) && <>{(['pdf','pptx','chart'] as const).map(kind=><button className="btn btn-ghost" key={kind} onClick={()=>onArtifact(kind,message)}>{text(kind==='pdf'?'createPdf':kind==='pptx'?'createSlides':'createChart')}</button>)}</>}
               <button className="btn btn-ghost" disabled={loading} onClick={onClearHistory} title={t.clearHistoryTitle}><RotateCcw size={13}/>{t.restartBtn}</button>
             </footer>}
           </article>)}

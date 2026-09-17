@@ -46,6 +46,8 @@ def describe(job):
 
 def inputs(request, user):
     sources, blocks = [], []
+    if not set(request.source_passages) <= set(request.source_ids):
+        raise HTTPException(422, 'Passage sources must belong to the selected answer')
     for identifier in dict.fromkeys(request.source_ids):
         doc, evidence = documents.evidence(identifier, user)
         if request.kind == 'translation':
@@ -53,8 +55,6 @@ def inputs(request, user):
                 raise HTTPException(422, 'Translate one document at a time')
             if request.scope not in {'passage', 'document'}:
                 raise HTTPException(422, 'Choose passage or full document translation')
-            if any(w.startswith('OCR_REQUIRED') for w in doc.extraction_warnings):
-                raise HTTPException(422, 'OCR is required before translation')
             if doc.extraction_warnings and not request.acknowledge_extraction_limits:
                 raise HTTPException(422, 'Review and acknowledge extraction limitations first')
             if request.scope == 'passage':
@@ -64,8 +64,20 @@ def inputs(request, user):
                 if not set(request.block_ids) <= known:
                     raise HTTPException(422, 'Unknown passage ID')
                 evidence = [b for b in evidence if b['id'] in request.block_ids]
+            for warning in doc.extraction_warnings:
+                if not warning.startswith('OCR_REQUIRED'):
+                    continue
+                match = re.fullmatch(r'OCR_REQUIRED: pages (\d+(?:,\s*\d+)*)', warning)
+                pages = {int(p.strip()) for p in match[1].split(',')} if match else None
+                if request.scope == 'document' or pages is None or any(b.get('page') is None or b['page'] in pages for b in evidence):
+                    raise HTTPException(422, 'OCR is required for the selected passages before translation')
         elif request.scope not in {'answer', 'conversation'} or not request.message_ids:
             raise HTTPException(422, 'Explicit message selection is required')
+        elif identifier in request.source_passages:
+            selected = set(request.source_passages[identifier])
+            if not selected <= {b['id'] for b in evidence}:
+                raise HTTPException(422, 'Unknown original passage ID')
+            evidence = [b for b in evidence if b['id'] in selected]
         sources.append(dict(id=doc.id, title=doc.title, language=doc.language, version=doc.original_hash,
                             warnings=doc.extraction_warnings, input_representation='original-extraction-v1'))
         blocks.extend(evidence)

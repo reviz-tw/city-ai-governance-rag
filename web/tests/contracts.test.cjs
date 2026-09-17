@@ -45,11 +45,29 @@ test('Edited text splits without inventing precise source locations',()=>{
 const {apiList}=load('src/lib/api.ts');
 test('Document list reports expired login and invalid payloads instead of array errors',async(t)=>{
   t.mock.method(global,'fetch',async()=>new Response(JSON.stringify({detail:'Sign in with Google to continue'}),{status:401}));
-  await assert.rejects(()=>apiList('/api/library'),/登入/);
+  await assert.rejects(()=>apiList('/api/library'),error=>error.status===401);
   global.fetch=async()=>new Response(JSON.stringify({detail:'Unexpected object'}));
-  await assert.rejects(()=>apiList('/api/library'),/文件清單格式錯誤/);
+  await assert.rejects(()=>apiList('/api/library'),/Invalid list response/);
   global.fetch=async()=>new Response(JSON.stringify([{id:'doc-1'}]));
   assert.deepEqual(await apiList('/api/library'),[{id:'doc-1'}]);
   global.fetch=async()=>new Response(JSON.stringify({detail:'Collection unavailable'}),{status:503});
   await assert.rejects(()=>apiList('/api/library'),/Collection unavailable/);
+});
+
+const {PANEL_COPY,panelText,panelError}=load('src/lib/panel-copy.ts');
+test('Every panel label has all six locales with consistent substitutions',()=>{
+  for(const [key,row] of Object.entries(PANEL_COPY)){
+    assert.equal(row.length,6,key);
+    const placeholders=text=>[...text.matchAll(/\{(\w+)\}/g)].map(m=>m[1]).sort();
+    for(const text of row){assert.ok(text.trim(),key);assert.deepEqual(placeholders(text),placeholders(row[0]),key);}
+  }
+  assert.equal(panelText('en','answerSources',{count:3}).includes('3'),true);
+  assert.equal(panelError({status:403}),'denied');
+  assert.equal(panelError({status:401}),'expired');
+});
+const {answerEvidence}=load('src/lib/answer-artifact.ts');
+test('Output actions bind to the selected answer and deduplicate its original passages',()=>{
+  const answer={id:'earlier-answer',content:'Earlier answer [1]',citations:[{document_id:'a',block_ids:['p1']},{document_id:'a',block_ids:['p1','p2']},{document_id:'b',block_ids:['p4']}]};
+  assert.deepEqual(answerEvidence(answer),{scope:'answer',message_ids:['earlier-answer'],source_ids:['a','b'],source_passages:{a:['p1','p2'],b:['p4']},context:'Earlier answer [1]'});
+  assert.deepEqual(answerEvidence({...answer,citations:[{document_id:'a'}]}).source_passages,{});
 });

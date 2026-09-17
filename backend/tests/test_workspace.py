@@ -222,3 +222,50 @@ def test_scanned_page_warning_cannot_be_bypassed_for_full_translation(monkeypatc
                             acknowledge_extraction_limits=True)
     with pytest.raises(HTTPException) as error:jobs.create(request)
     assert error.value.status_code==422
+
+
+def test_passage_translation_ignores_ocr_on_other_pages_but_blocks_affected_page():
+    from reportlab.pdfgen import canvas
+    data=io.BytesIO();pdf=canvas.Canvas(data)
+    pdf.drawString(40,750,'Human review is required before deploying municipal AI systems.')
+    pdf.showPage();pdf.drawString(40,750,'Scan');pdf.showPage();pdf.save()
+    created=documents.create(data.getvalue(),'mixed-passages.pdf','application/pdf',{'language':'en'})
+    request=ArtifactRequest(kind='translation',scope='passage',source_ids=[created['id']],block_ids=['p1'],language='ja',acknowledge_extraction_limits=True)
+    _, blocks=jobs.inputs(request,User('editor','editor@example.test'))
+    assert len(blocks)==1 and blocks[0]['page']==1
+    request.block_ids=['p2']
+    with pytest.raises(HTTPException) as error:jobs.create(request)
+    assert error.value.status_code==422
+    request.block_ids=['nonexistent']
+    with pytest.raises(HTTPException):jobs.create(request)
+
+
+def test_answer_artifacts_use_only_original_cited_passages_and_enforce_acl(source):
+    request=ArtifactRequest(kind='pdf',scope='answer',message_ids=['answer-1'],source_ids=[source['id']],source_passages={source['id']:['p2']},language='en')
+    _, blocks=jobs.inputs(request,User('editor','editor@example.test'))
+    assert [b['id'] for b in blocks]==['p2']
+    assert blocks[0]['text']=='In 2026, 20 cases required review. No automatic approval is allowed.'
+    with pytest.raises(HTTPException) as denied:jobs.inputs(request,User('other','other@example.test'))
+    assert denied.value.status_code==404
+    request.source_passages={source['id']:['unknown']}
+    with pytest.raises(HTTPException):jobs.inputs(request,User('editor','editor@example.test'))
+    request.source_passages={'unselected-document':['p2']}
+    with pytest.raises(HTTPException):jobs.inputs(request,User('editor','editor@example.test'))
+
+
+def test_search_snippets_match_original_paragraphs_without_guessing():
+    blocks=[{'id':'p1','text':'Municipal AI requires human review before approval.'}, {'id':'p2','text':'The budget is 20 million dollars.'}, {'id':'p3','text':'Title'}]
+    assert documents.cited_passages(blocks,'…Municipal <b>AI</b> requires human review\nbefore approval.…')==['p1']
+    assert documents.cited_passages(blocks,'The budget is 20 million dollars. …')==['p2']
+    assert documents.cited_passages(blocks,'An AI paraphrase without an exact passage')==[]
+    assert documents.cited_passages(blocks,'Title')==[]
+
+
+def test_publication_diff_localizes_metadata_without_changing_review_hash(source):
+    doc=documents.get(source['id'])
+    before=chunks.diff_hash(doc)
+    assert 'Original range:' in chunks.diff(doc.id,'en')
+    assert '原文範圍:' in chunks.diff(doc.id,'zh')
+    assert 'Plage originale:' in chunks.diff(doc.id,'fr')
+    assert chunks.diff_hash(doc)==before
+    assert 'No automatic approval is allowed.' in chunks.diff(doc.id,'fr')

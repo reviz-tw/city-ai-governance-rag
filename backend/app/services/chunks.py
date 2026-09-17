@@ -52,19 +52,27 @@ def save(document_id, revision, chunks, reset=False, chunk_size=1500):
         return documents.describe(doc, True)
 
 
-def diff(document_id):
+def diff(document_id, language='zh'):
+    chunk_label, reference_label, page_label, published_label, draft_label = {
+        'zh': ('切片', '原文範圍', '頁', '已發布', '草稿'),
+        'en': ('Chunk', 'Original range', 'Page', 'Published', 'Draft'),
+        'ja': ('チャンク', '原文範囲', 'ページ', '公開済み', '下書き'),
+        'fr': ('Segment', 'Plage originale', 'Page', 'Publié', 'Brouillon'),
+        'es': ('Fragmento', 'Rango original', 'Página', 'Publicado', 'Borrador'),
+        'ru': ('Фрагмент', 'Диапазон оригинала', 'Страница', 'Опубликовано', 'Черновик'),
+    }.get(language, ('Chunk', 'Original range', 'Page', 'Published', 'Draft'))
     doc = documents.get(document_id, edit=True)
     def snapshot(values):
         rendered=[]
         for index,chunk in enumerate(values):
-            refs=', '.join(f"{r['block_id']}[{r['start']}:{r['end']}] 頁 {r['page'] if r['page'] is not None else '—'}" for r in chunk['refs'])
-            rendered.append(f"切片 {index+1} · {chunk['id']}\n原文範圍：{refs}\n{chunk['content']}")
+            refs=', '.join(f"{r['block_id']}[{r['start']}:{r['end']}] {page_label} {r['page'] if r['page'] is not None else '—'}" for r in chunk['refs'])
+            rendered.append(f"{chunk_label} {index+1} · {chunk['id']}\n{reference_label}: {refs}\n{chunk['content']}")
         return '\n\n'.join(rendered)
     with store.session() as db:
         previous = db.get(store.Publication, f'{doc.id}:{doc.published_version}')
         before = snapshot(previous.chunks) if previous else ''
     after = snapshot(doc.draft)
-    return '\n'.join(difflib.unified_diff(before.splitlines(), after.splitlines(), fromfile='published', tofile='draft', lineterm=''))
+    return '\n'.join(difflib.unified_diff(before.splitlines(), after.splitlines(), fromfile=published_label, tofile=draft_label, lineterm=''))
 
 
 def diff_hash(doc):

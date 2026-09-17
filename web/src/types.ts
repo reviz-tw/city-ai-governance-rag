@@ -7,6 +7,7 @@ export interface Citation {
   document_id?: string;
   language?: string;
   version?: string;
+  block_ids?: string[];
   chunk_id?: string;
   page_start?: number;
   page_end?: number;

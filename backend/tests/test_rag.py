@@ -81,3 +81,10 @@ def test_context_rewrite_and_bounded_history(monkeypatch):
     assert '風險管理' in result['retrieval_query']
     assert len(call.call_args.args[0].encode()) < 10000
     assert prepare('New question',None)['history']==[]
+
+
+def test_managed_citations_keep_original_passage_ids(retrieved):
+    retrieved.return_value[0]['refs']=[{'block_id':'p4','page':3},{'block_id':'p4','page':3},{'block_id':'p5','page':4}]
+    retrieved.return_value[0]['chunk_id']='chunk-a'
+    _,_,sources,_=rag.prepare_rag('What is the policy?')
+    assert sources[0]['block_ids']==['p4','p5']

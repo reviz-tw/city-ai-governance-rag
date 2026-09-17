@@ -158,10 +158,10 @@ def save_draft(document_id: str, body: ChunkDraftRequest):
         raise HTTPException(422, str(exc)) from None
 
 @router.get('/library/{document_id}/diff')
-def chunk_diff(document_id: str):
+def chunk_diff(document_id: str, language: str = 'zh'):
     from app.services import chunks
     doc=documents.get(document_id,edit=True)
-    return {'diff':chunks.diff(document_id), 'hash':chunks.diff_hash(doc)}
+    return {'diff':chunks.diff(document_id, language), 'hash':chunks.diff_hash(doc)}
 
 class PublishRequest(BaseModel):
     revision: int

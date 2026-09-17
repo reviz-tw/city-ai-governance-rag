@@ -1,10 +1,12 @@
 import {ReactNode, useEffect, useRef} from 'react';
+import {useLocale} from '../lib/locale';
 import {X} from 'lucide-react';
 
 /** Native modal semantics keep keyboard focus in the active (including nested) panel. */
 export function WorkspacePanel({title, onClose, children, className = ''}: {
   title: string; onClose: () => void; children: ReactNode; className?: string;
 }) {
+  const {t} = useLocale();
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const element = dialog.current!;
@@ -27,7 +29,7 @@ export function WorkspacePanel({title, onClose, children, className = ''}: {
       const rect = event.currentTarget.getBoundingClientRect();
       if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) onClose();
     }}>
-    <div className="panel-header"><h2>{title}</h2><button className="btn btn-secondary btn-icon" onClick={onClose} aria-label="關閉 / Close" autoFocus><X size={16}/></button></div>
+    <div className="panel-header"><h2>{title}</h2><button className="btn btn-secondary btn-icon" onClick={onClose} aria-label={t('close')} autoFocus><X size={16}/></button></div>
     <div className="panel-body">{children}</div>
   </dialog>;
 }

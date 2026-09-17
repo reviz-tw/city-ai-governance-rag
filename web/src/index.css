@@ -292,3 +292,16 @@
 .chunk-card .btn { margin: 4px 8px 4px 0; }
 .publication-diff { max-height: 360px; overflow: auto; padding: 16px; background: var(--color-bg); }
 @media(max-width:600px) { .admin-library-header { flex-direction: column; align-items: start; } .library-toolbar { align-items: stretch; flex-direction: column; } }
+
+/* The research surface has two columns: answer and its sources. */
+.header-tools { position: relative; }
+.header-tools > summary { list-style: none; white-space: nowrap; }
+.header-tools > summary::-webkit-details-marker { display: none; }
+.header-tools nav { position: absolute; z-index: 20; right: 0; top: calc(100% + 10px); width: 260px; padding: 10px; background: #fff; border: 1px solid var(--color-divider); border-radius: 14px; box-shadow: 0 8px 24px #0001; }
+.header-tools nav .btn { width: 100%; justify-content: flex-start; }
+.answer-excerpt { border-left: 3px solid var(--color-divider); padding: 10px 16px; max-height: 180px; overflow: auto; white-space: pre-wrap; }
+.inline-confirmation { position: sticky; bottom: 0; background: #fff; border: 1px solid var(--color-divider); border-radius: 12px; padding: 18px; box-shadow: 0 -4px 20px #0001; z-index: 2; }
+.chunk-editor h2:focus { outline: none; }
+@media (max-width: 760px) { .app-header { flex-wrap: wrap; } .header-controls { margin-left: auto; } .header-tools > summary { padding: 6px 10px; font-size: 12px; } }
+.chunk-editor .parallel-text > div { max-height: 52vh; overflow: auto; min-width: 0; padding-right: 10px; }
+.chunk-editor textarea { min-height: 150px; }

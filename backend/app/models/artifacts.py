@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Annotated, Literal
 from pydantic import BaseModel, Field, field_validator
 from app.services.languages import normalize_language
 
@@ -7,6 +7,7 @@ class ArtifactRequest(BaseModel):
     scope: Literal['answer', 'conversation', 'passage', 'document']
     message_ids: list[str] = Field(default_factory=list, max_length=12)
     source_ids: list[str] = Field(min_length=1, max_length=12)
+    source_passages: dict[str, Annotated[list[str], Field(min_length=1, max_length=50)]] = Field(default_factory=dict, max_length=12)
     context: str = Field('', max_length=6000)
     language: str = 'zh-TW'
     template: Literal['research-v1'] = 'research-v1'
