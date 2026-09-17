@@ -67,7 +67,9 @@ test('Every panel label has all six locales with consistent substitutions',()=>{
 });
 const {answerEvidence}=load('src/lib/answer-artifact.ts');
 test('Output actions bind to the selected answer and deduplicate its original passages',()=>{
-  const answer={id:'earlier-answer',content:'Earlier answer [1]',citations:[{document_id:'a',block_ids:['p1']},{document_id:'a',block_ids:['p1','p2']},{document_id:'b',block_ids:['p4']}]};
-  assert.deepEqual(answerEvidence(answer),{scope:'answer',message_ids:['earlier-answer'],source_ids:['a','b'],source_passages:{a:['p1','p2'],b:['p4']},context:'Earlier answer [1]'});
-  assert.deepEqual(answerEvidence({...answer,citations:[{document_id:'a'}]}).source_passages,{});
+  const answer={id:'earlier-answer',content:'Earlier answer [1] [2] [3]',citations:[{citation_id:1,document_id:'a',block_ids:['p1']},{citation_id:2,document_id:'a',block_ids:['p1','p2']},{citation_id:3,document_id:'b',block_ids:['p4']},{citation_id:4,document_id:'unused',block_ids:['p9']}]};
+  assert.deepEqual(answerEvidence(answer),{scope:'answer',message_ids:['earlier-answer'],source_ids:['a','b'],source_passages:{a:['p1','p2'],b:['p4']},context:'Earlier answer [1] [2] [3]'});
+  assert.deepEqual(answerEvidence({...answer,citations:[{citation_id:1,document_id:'a'}]}).source_passages,{});
 });
+
+test('Outputs never include uncited retrieved documents',()=>{assert.deepEqual(answerEvidence({id:'a',content:'No supporting evidence.',citations:[{citation_id:1,document_id:'uncited'}]}).source_ids,[]);});

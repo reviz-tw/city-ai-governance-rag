@@ -4,6 +4,7 @@ import {ChatMessage, Citation} from '../types';
 import {UIStrings} from '../i18n';
 import {CONTENT_LANGUAGES, InterfaceLanguage} from '../lib/languages';
 import {researchCopy} from '../lib/research-copy';
+import {answerEvidence} from '../lib/answer-artifact';
 import {useLocale} from '../lib/locale';
 import {WorkspacePanel} from './WorkspacePanel';
 
@@ -116,7 +117,7 @@ export function ChatView({t, lang, messages, loading, onSendMessage, onClearHist
               <span className="answer-time">{message.timestamp}</span>
               {!!message.citations?.length && <button className="btn btn-ghost answer-sources" onClick={() => showSources(message)}><BookOpen size={14}/>{t.sourcesHeader} · {message.citations.length}</button>}
               <button className="btn btn-ghost" disabled={!message.content} onClick={() => void copy(message)}>{copiedId === message.id ? <Check size={13}/> : <Copy size={13}/>}{copiedId === message.id ? t.copiedBtn : t.copyBtn}</button>
-              {!message.error && message.citations?.some(c=>c.document_id) && <>{(['pdf','pptx','chart'] as const).map(kind=><button className="btn btn-ghost" key={kind} onClick={()=>onArtifact(kind,message)}>{text(kind==='pdf'?'createPdf':kind==='pptx'?'createSlides':'createChart')}</button>)}</>}
+              {!message.error && answerEvidence(message).source_ids.length>0 && <>{(['pdf','pptx','chart'] as const).map(kind=><button className="btn btn-ghost" key={kind} onClick={()=>onArtifact(kind,message)}>{text(kind==='pdf'?'createPdf':kind==='pptx'?'createSlides':'createChart')}</button>)}</>}
               <button className="btn btn-ghost" disabled={loading} onClick={onClearHistory} title={t.clearHistoryTitle}><RotateCcw size={13}/>{t.restartBtn}</button>
             </footer>}
           </article>)}

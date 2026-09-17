@@ -269,3 +269,13 @@ def test_publication_diff_localizes_metadata_without_changing_review_hash(source
     assert 'Plage originale:' in chunks.diff(doc.id,'fr')
     assert chunks.diff_hash(doc)==before
     assert 'No automatic approval is allowed.' in chunks.diff(doc.id,'fr')
+
+
+def test_snippet_spanning_pdf_paragraphs_locates_both_exact_originals():
+    blocks=[{'id':'p1','text':'1. Municipal report: https://example.test/governance/responsible-use-of-generative-ai.html.'},
+            {'id':'p2','text':'2. Public Office, Guidance to staff on use of\n generative AI (2026), https://example.test/guide.'},
+            {'id':'p3','text':'Guidance for a different topic without matching content.'}]
+    snippet='...governance/responsible-use-of-<b>generative-ai</b>.html. 2. Public Office, <b>Guidance</b> to staff on use of generative AI&nbsp;...'
+    assert documents.cited_passages(blocks,snippet)==['p1','p2']
+    assert '<b>' not in documents.plain_search_text(snippet)
+    assert '&nbsp;' not in documents.plain_search_text(snippet)

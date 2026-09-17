@@ -308,6 +308,7 @@ def retrieve(query, city=None, languages=None):
 def prepare_rag(query, city_filter=None, response_language='auto', interface_language=None,
                 source_languages=None, research_context=None):
     from app.models.schema import RAGQueryRequest
+    from app.services.documents import plain_search_text
     RAGQueryRequest(query=query,city=city_filter,response_language=response_language,
         interface_language=interface_language,source_languages=source_languages or [],research_context=research_context)
     context = prepare(query, research_context, city_filter)
@@ -318,6 +319,7 @@ def prepare_rag(query, city_filter=None, response_language='auto', interface_lan
     budget = settings.CONTEXT_EVIDENCE_TOKENS
     for res in results:
         snippet = ' '.join(s.get('snippet', '') for s in res.get('snippets', []) if isinstance(s, Mapping))
+        snippet = plain_search_text(snippet)
         if not snippet or snippet in seen:
             continue
         seen.add(snippet)

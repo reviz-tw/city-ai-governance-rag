@@ -88,3 +88,10 @@ def test_managed_citations_keep_original_passage_ids(retrieved):
     retrieved.return_value[0]['chunk_id']='chunk-a'
     _,_,sources,_=rag.prepare_rag('What is the policy?')
     assert sources[0]['block_ids']==['p4','p5']
+
+
+def test_search_markup_is_removed_from_citations_and_model_evidence(retrieved):
+    retrieved.return_value[0]['snippets']=[{'snippet':'Review <b>AI</b> use &amp; human oversight.'}]
+    _,content,sources,_=rag.prepare_rag('What is the policy?')
+    assert sources[0]['snippet']=='Review AI use & human oversight.'
+    assert '<b>' not in content and '&amp;' not in content

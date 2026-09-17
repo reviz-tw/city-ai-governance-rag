@@ -194,19 +194,33 @@ def evidence(document_id, user=None):
     return doc, [dict(**b, document_id=doc.id, version=doc.original_hash) for b in doc.blocks]
 
 
+def plain_search_text(snippet):
+    return html.unescape(re.sub(r'<[^>]+>', '', snippet))
+
+
 def cited_passages(blocks, snippet):
     """Locate only substantial exact source text, never guess from a document title.
 
     Search snippets can contain markup, layout whitespace and ellipsis gaps.
     Matching returns complete original paragraph IDs for reading/translation.
     """
-    plain = html.unescape(re.sub(r'<[^>]+>', '', snippet))
+    plain = plain_search_text(snippet)
     fragments = [re.sub(r'\s+', '', part).casefold()
                  for part in re.split(r'\.{3,}|…+|[。!?！？\n]', plain)]
     fragments = [part for part in fragments if len(part) >= 16]
+    # A snippet can bridge two PDF paragraphs without an ellipsis between them.
+    # Require a substantial exact span inside each paragraph instead of requiring
+    # the entire search excerpt to fit inside a single extraction block.
+    spans = []
+    for part in fragments:
+        if len(part) <= 32:
+            spans.append(part)
+        else:
+            spans.extend(part[start:start+32] for start in range(0, len(part)-31, 16))
+            spans.append(part[-32:])
     found = []
     for block in blocks:
         text = re.sub(r'\s+', '', block['text']).casefold()
-        if len(text) >= 16 and any(part in text or text in part for part in fragments):
+        if len(text) >= 16 and (any(part in text or text in part for part in fragments) or any(span in text for span in spans)):
             found.append(block['id'])
     return found
