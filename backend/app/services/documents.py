@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from fastapi import HTTPException
 from pypdf import PdfReader
 from docx import Document as WordDocument
-from sqlalchemy import select
+from sqlalchemy import and_, func, select
 from app.services import store
 from app.services.auth import User, require_user, require_editor
 from app.services.languages import normalize_language, detect
@@ -138,13 +138,42 @@ def create(data: bytes, filename: str, mime: str, metadata: dict, cleaned_text: 
     return describe(doc)
 
 
-def describe(doc, include_content=False):
+def activity_for_documents(db, document_ids):
+    """Summarize durable saves and submissions without loading revision contents."""
+    if not document_ids:
+        return {}
+    activity = {document_id: {'last_draft_saved_at': None, 'last_index_submission': None}
+                for document_id in document_ids}
+    saved = db.execute(select(store.DraftRevision.document_id, func.max(store.DraftRevision.created_at))
+                       .where(store.DraftRevision.document_id.in_(document_ids))
+                       .group_by(store.DraftRevision.document_id))
+    for document_id, created_at in saved:
+        activity[document_id]['last_draft_saved_at'] = created_at
+    latest = (select(store.Publication.document_id,
+                     func.max(store.Publication.version).label('version'))
+              .where(store.Publication.document_id.in_(document_ids))
+              .group_by(store.Publication.document_id).subquery())
+    submissions = db.execute(select(store.Publication.document_id, store.Publication.version,
+                                    store.Publication.created_at, store.Publication.status)
+                             .join(latest, and_(store.Publication.document_id == latest.c.document_id,
+                                                store.Publication.version == latest.c.version)))
+    for document_id, version, submitted_at, status in submissions:
+        activity[document_id]['last_index_submission'] = dict(version=version, submitted_at=submitted_at,
+                                                              status=status)
+    return activity
+
+
+def describe(doc, include_content=False, activity=None):
     user = require_user()
     editable = user.editor and (user.admin or doc.owner == user.id)
     result = dict(id=doc.id, title=doc.title, language=doc.language, original_hash=doc.original_hash,
                   metadata=doc.metadata_json, warnings=doc.extraction_warnings,
                   draft_revision=doc.draft_revision, published_version=doc.published_version,
                   index_status=doc.index_status, shared=doc.shared, editable=editable)
+    if activity is None:
+        with store.session() as db:
+            activity = activity_for_documents(db, [doc.id])[doc.id]
+    result.update(activity)
     if doc.id.startswith("legacy-"):
         from app.core.config import settings
         result["legacy_filename"] = doc.original_key.removeprefix(f"gs://{settings.GCS_BUCKET_NAME}/documents/")
@@ -161,7 +190,9 @@ def describe(doc, include_content=False):
 def list_documents():
     user = require_user()
     with store.session() as db:
-        return [describe(d) for d in db.scalars(select(store.Document)) if can_read(d, user)]
+        visible = [d for d in db.scalars(select(store.Document)) if can_read(d, user)]
+        activity = activity_for_documents(db, [d.id for d in visible])
+        return [describe(d, activity=activity[d.id]) for d in visible]
 
 
 def register_legacy(result):

@@ -1,3 +1,4 @@
+import time
 import pytest
 from fastapi.testclient import TestClient
 from app.core.config import settings
@@ -87,6 +88,52 @@ def test_large_draft_survives_session_expiry_and_requires_rechunk_before_indexin
     blocked = client.post(path + '/publish', json={'revision':2,'reviewed_diff':review['hash']}, headers=HEADERS)
     assert blocked.status_code == 422 and '1000' in blocked.json()['detail']
     assert client.get(path).json()['index_status'] == 'unpublished'
+
+
+def test_library_shows_durable_draft_save_and_latest_index_submission(client, source, monkeypatch):
+    from app.services import jobs
+    monkeypatch.setattr(settings, 'CHUNK_INDEX_ENABLED', True)
+    monkeypatch.setattr(settings, 'CHUNK_DATA_STORE_ID', 'test-store')
+    monkeypatch.setattr(jobs, 'dispatch_job', lambda job: None)
+    login(client, 'editor')
+    path = '/api/library/' + source['id']
+    initial = next(d for d in client.get('/api/library').json() if d['id'] == source['id'])
+    assert initial['last_draft_saved_at'] is None
+    assert initial['last_index_submission'] is None
+
+    before = time.time()
+    saved = client.post(path + '/draft', json={'revision':initial['draft_revision'],
+                         'chunks':client.get(path).json()['draft']}, headers=HEADERS).json()
+    assert before <= saved['last_draft_saved_at'] <= time.time()
+    assert saved['last_index_submission'] is None
+    listed = next(d for d in client.get('/api/library').json() if d['id'] == source['id'])
+    assert listed['last_draft_saved_at'] == saved['last_draft_saved_at']
+
+    review = client.get(path + '/diff').json()
+    submitted = client.post(path + '/publish', json={'revision':saved['draft_revision'],
+                            'reviewed_diff':review['hash']}, headers=HEADERS)
+    assert submitted.status_code == 200
+    latest = client.get(path).json()['last_index_submission']
+    assert latest['version'] == 1 and latest['status'] == 'pending'
+    assert before <= latest['submitted_at'] <= time.time()
+    assert next(d for d in client.get('/api/library').json() if d['id'] == source['id'])['last_index_submission'] == latest
+
+    with store.session() as db:
+        db.get(store.Publication, source['id'] + ':1').status = 'published'
+        doc = db.get(store.Document, source['id'])
+        doc.index_status, doc.published_version = 'indexed', 1
+        db.commit()
+    assert client.get(path).json()['last_index_submission'] == {**latest, 'status':'published'}
+
+    newer = client.post(path + '/draft', json={'revision':saved['draft_revision'],
+                        'chunks':saved['draft']}, headers=HEADERS).json()
+    assert newer['last_draft_saved_at'] > latest['submitted_at']
+    assert newer['last_index_submission']['version'] == 1
+    review = client.get(path + '/diff').json()
+    second = client.post(path + '/publish', json={'revision':newer['draft_revision'],
+                         'reviewed_diff':review['hash']}, headers=HEADERS)
+    assert second.status_code == 200
+    assert client.get(path).json()['last_index_submission']['version'] == 2
 
 
 def test_reader_cannot_edit_or_publish_shared_document(client, source):

@@ -268,6 +268,8 @@
 .library-row > div:first-child { flex: 1; min-width: 0; }
 .library-row strong { font-size: 16px; overflow-wrap: anywhere; }
 .library-row p { font: 12px/1.7 var(--font-ui); color: var(--color-muted); margin: 6px 0 0; }
+.document-activity { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; color: var(--color-muted); font: 12px/1.6 var(--font-ui); }
+.document-activity-unsent { color: var(--color-accent-700); }
 .library-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; max-width: 45%; }
 .artifact-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; align-items: start; }
 .artifact-fields > * { min-width: 0; }

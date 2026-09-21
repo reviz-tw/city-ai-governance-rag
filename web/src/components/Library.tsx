@@ -11,6 +11,21 @@ function LibraryFrame({standalone, editing, onClose, children}: {standalone:bool
   return <main className={`admin-library ${editing?'is-editing':''}`}><header className="admin-library-header"><div>{!editing&&<p className="eyebrow">City AI governance · Admin</p>}<h1>{t('adminTitle')}</h1></div><nav><a href="/">{t('returnResearch')}</a><a href="/admin/tools/">{t('aiTools')}</a></nav></header>{children}</main>;
 }
 
+function DocumentActivity({document}: {document:any}) {
+  const {t,date} = useLocale();
+  const saved = document.last_draft_saved_at;
+  const submission = document.last_index_submission;
+  const status = submission?.status === 'published' ? t('indexed') :
+    submission?.status === 'pending' ? t('pending') :
+    submission?.status === 'failed' ? t('failed') :
+    submission?.status === 'cancelled' ? t('cancelled') : t('error');
+  return <div className="document-activity">
+    <span>{saved ? t('lastDraftSaved',{date:date(saved)}) : t('neverSavedDraft')}</span>
+    <span>{submission ? t('lastIndexSubmitted',{version:submission.version,date:date(submission.submitted_at),status}) : t('neverIndexSubmitted')}</span>
+    {saved && submission && saved > submission.submitted_at && <span className="document-activity-unsent">{t('newerDraft')}</span>}
+  </div>;
+}
+
 export function Library({editor, admin=false, standalone=false, onClose, onSessionExpired, onDraftDirtyChange}: {editor:boolean; admin?:boolean; standalone?:boolean; onClose:()=>void; onSessionExpired?:()=>void; onDraftDirtyChange?:(dirty:boolean)=>void}) {
   const {t, lang, error: errorText, label} = useLocale();
   const [confirmation, setConfirmation] = useState<'reset'|'leave'|null>(null);
@@ -98,13 +113,13 @@ export function Library({editor, admin=false, standalone=false, onClose, onSessi
     <div className="library-toolbar"><label>{t('searchDocuments')}<input value={filter} onChange={e=>setFilter(e.target.value)} placeholder={t('searchDocuments')}/></label><button className="btn" onClick={()=>run(async()=>{await refresh();await refreshLegacy();})}>{t('refresh')}</button></div>
     {loading && <p role="status">{t('loading')}</p>}
     {!loading && !docs.length && !legacy.length && !error && !legacyError && <p className="empty-panel">{t('noDocuments')}</p>}
-    {docs.filter(d=>matches(d.title)).map(d=><div key={d.id} className="library-row"><div><strong>{d.title}</strong><p>{d.language} · {label(d.index_status)} · {t('publishedVersion',{version:d.published_version})} · {t('draftRevision',{revision:d.draft_revision})}</p></div><div className="library-actions"><a className="btn btn-secondary" href={`/api/library/${d.id}/original`} target="_blank" rel="noreferrer">{t('openOriginal')}</a>{d.editable&&<button className="btn btn-ghost" onClick={()=>openDocument(d.id)}>{t('editChunks')}</button>}</div></div>)}
+    {docs.filter(d=>matches(d.title)).map(d=><div key={d.id} className="library-row"><div><strong>{d.title}</strong><p>{d.language} · {label(d.index_status)} · {t('publishedVersion',{version:d.published_version})} · {t('draftRevision',{revision:d.draft_revision})}</p><DocumentActivity document={d}/></div><div className="library-actions"><a className="btn btn-secondary" href={`/api/library/${d.id}/original`} target="_blank" rel="noreferrer">{t('openOriginal')}</a>{d.editable&&<button className="btn btn-ghost" onClick={()=>openDocument(d.id)}>{t('editChunks')}</button>}</div></div>)}
     {legacyError && <p role="alert">{legacyError}</p>}
     {historical.length>0 && <details><summary>{t('historical',{count:historical.length})}</summary><p>{t('historicalHint')}</p>{historical.map(item=><div className="library-row" key={item.filename}><div><strong>{item.filename}</strong><p>{item.language} · {t('legacy-index')}</p></div>{admin&&<button className="btn" onClick={()=>{
       void run(async()=>{loadDoc(await api('/api/library/legacy-draft',jsonRequest({filename:item.filename})));await refresh();});
     }}>{t('openDraft')}</button>}</div>)}</details>}
     </>}
-    {doc?.editable && editor && <section className="chunk-editor" aria-label={t('editor')}><button className="btn btn-secondary" onClick={()=>dirty?setConfirmation('leave'):setDoc(null)}>{t('back')}</button><h2 tabIndex={-1} ref={editorHeading}>{doc.title} · {t('draftRevision',{revision:doc.draft_revision})}</h2><p>{label(doc.index_status)} · {t('publishedVersion',{version:doc.published_version})}</p>
+    {doc?.editable && editor && <section className="chunk-editor" aria-label={t('editor')}><button className="btn btn-secondary" onClick={()=>dirty?setConfirmation('leave'):setDoc(null)}>{t('back')}</button><h2 tabIndex={-1} ref={editorHeading}>{doc.title} · {t('draftRevision',{revision:doc.draft_revision})}</h2><p>{label(doc.index_status)} · {t('publishedVersion',{version:doc.published_version})}</p><DocumentActivity document={doc}/>
       {doc.warnings?.length>0 && <p>{t('extractionNote')}</p>}
       <div className="chunk-reflow-tools"><button className="btn btn-secondary" onClick={()=>run(async()=>{
         const result=await api(`/api/library/${doc.id}/preview-reflow`,jsonRequest({revision:doc.draft_revision,chunks:doc.draft}));
