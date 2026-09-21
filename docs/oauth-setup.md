@@ -16,7 +16,7 @@
 
 目前採 Google Identity Services 的 JavaScript callback，後端驗證 ID token；不使用授權碼交換，因此沒有 redirect URI，也不需要 client secret。未下載或保存 Google 產生的 client secret。
 
-目標對象採「外部／測試」，已核對的 Google 測試帳號為 `hcchien@gmail.com`、`hcchien@reviz.tw`。後端另以 `LOGIN_ALLOWED_EMAILS` 實際限制可登入帳號；2026-09-21 設定的名單為：
+目標對象採「外部／測試」。2026-09-21 已在 Google Console 儲存並核對四個測試帳號，與後端 `LOGIN_ALLOWED_EMAILS` 的登入名單一致：
 
 - `hcchien@gmail.com`
 - `hcchien@reviz.tw`
@@ -31,7 +31,7 @@ Google 的基本身分登入（openid/email/profile）適用測試名單例外�
 
 使用同一個 OAuth Web client。Google Identity Services token model 在使用者點擊匯出時才要求 `https://www.googleapis.com/auth/drive.file`；不用 client secret、授權碼或 refresh token。此範圍僅涵蓋本應用建立或由使用者選取的檔案，不要求完整 `drive`／`presentations` 範圍。短期 access token 只存在瀏覽器記憶體，直接呼叫 Google Drive REST API，不經本站後端。
 
-部署前須啟用 `drive.googleapis.com`，並在 OAuth「資料存取權」宣告 `drive.file`。2026-09-17 已啟用 Drive API，並核對「目標對象」確實包含 `hcchien@gmail.com`、`hcchien@reviz.tw`；額外的 Drive 授權不適用僅基本登入的測試名單例外。兩個 `azoezoe` 帳號的 Google 測試對象設定尚未核對，後端登入白名單不代表已啟用 Google Slides 匯出。網站仍採外部／測試狀態，尚未開放一般帳號。
+部署前須啟用 `drive.googleapis.com`，並在 OAuth「資料存取權」宣告 `drive.file`。2026-09-17 已啟用 Drive API；2026-09-21 已核對「目標對象」包含上述四個帳號。額外的 Drive 授權不適用僅基本登入的測試名單例外，使用者仍須在「另存 Google Slides」時自行同意授權；尚未以兩個 `azoezoe` 帳號實際匯出驗證。網站仍採外部／測試狀態，尚未開放一般帳號。
 
 完成投影片後，前端重新下載已通過本人及來源 ACL／版本檢查的 PPTX，以 Drive resumable upload 及 `application/vnd.google-apps.presentation` 轉成原生簡報。`about.user.emailAddress` 必須符合目前登入者；`about.importFormats` 必須支援 PowerPoint 轉換。以任務版本的雜湊寫入 `appProperties.cityRagExport`，重試時先搜尋副本，同來源分頁以 Web Locks 避免同時上傳；不自動重試結果不明的寫入。不同裝置同時匯出仍可能建立兩份，沒有宣稱跨裝置 exactly-once。
 
