@@ -23,7 +23,7 @@
 - `azoezoe@reviz.tw`
 - `azoezoe@gmail.com`
 
-Google 的基本身分登入（openid/email/profile）適用測試名單例外，因此不需逐一加入 Google 名單；詳見 https://support.google.com/cloud/answer/15549945?hl=en 。所有 cookie 與 MCP bearer 登入均套用後端名單。`ADMIN_EMAILS`、`EDITOR_EMAILS` 決定文件編輯與發布角色，登入本身不授予編輯權限。兩個新增的 `azoezoe` 帳號為閱讀者。
+Google 的基本身分登入（openid/email/profile）適用測試名單例外，因此不需逐一加入 Google 名單；詳見 https://support.google.com/cloud/answer/15549945?hl=en 。所有 cookie 與 MCP bearer 登入均套用後端名單。`ADMIN_EMAILS`、`EDITOR_EMAILS` 決定文件編輯與發布角色，登入本身不授予編輯權限。`hcchien@reviz.tw`、`azoezoe@reviz.tw`、`azoezoe@gmail.com` 設為管理員，可編輯文件切片、儲存草稿與送出索引；`hcchien@gmail.com` 為閱讀者。
 
 初次登入只使用基本身分與電子郵件，不要求 Drive 權限。原始文件及使用者明確選定的有限對話內容會傳送至專案設定的 Gemini global endpoint；對話不永久存入 session。
 
