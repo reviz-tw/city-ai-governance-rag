@@ -23,7 +23,7 @@ PYTHONPATH=backend .venv/bin/python backend/scripts/dev_server.py
 
 ## 登入與文件權限
 
-登入只取得 Google 基本身分；使用者點擊「另存 Google Slides」時才要求 `drive.file`，限本應用建立或使用者選取的檔案。不要求 Gmail 或整個 Drive 的存取權。Google access token 僅保留在瀏覽器記憶體，不傳回後端、不存入資料庫或瀏覽器儲存空間。`LOGIN_ALLOWED_EMAILS` 限制可登入帳號；空名單代表允許所有通過 Google 身分驗證的帳號，**目前 dev 限定兩個已核准帳號**。`ADMIN_EMAILS`、`EDITOR_EMAILS` 決定編輯角色。新文件預設私人，只有擁有者／管理員可修改；分享名單另行管理讀取權。歷史 `documents/` 公開資料集按原有公開範圍登錄，與新私人文件分開處理。
+登入只取得 Google 基本身分；使用者點擊「另存 Google Slides」時才要求 `drive.file`，限本應用建立或使用者選取的檔案。不要求 Gmail 或整個 Drive 的存取權。Google access token 僅保留在瀏覽器記憶體，不傳回後端、不存入資料庫或瀏覽器儲存空間。`LOGIN_ALLOWED_EMAILS` 限制可登入帳號；空名單代表允許所有通過 Google 身分驗證的帳號，**目前 dev 限定四個已核准帳號**，名單見 [Google 登入設定](docs/oauth-setup.md)。`ADMIN_EMAILS`、`EDITOR_EMAILS` 決定編輯角色。新文件預設私人，只有擁有者／管理員可修改；分享名單另行管理讀取權。歷史 `documents/` 公開資料集按原有公開範圍登錄，與新私人文件分開處理。
 
 原始檔不可由清理／切片草稿覆寫。每份來源保留雜湊、段落與頁碼；人工切片修改另存版本、差異與操作者。儲存草稿不會發布，每個 Chunk 以標準 Document 匯入，並經 Search 核對全部切片後才切換發布版本。預估等待 10～30 分鐘（依 Vertex 索引狀態），期間維持前版。詳見 [Chunk-as-Document](docs/chunk-as-document.md)。舊 Admin 的本地切片視圖明確標為預覽。
 
