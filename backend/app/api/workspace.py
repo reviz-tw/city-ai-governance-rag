@@ -149,7 +149,7 @@ def download(job_id: str, name: str, inline: bool = False):
 
 class ChunkDraftRequest(BaseModel):
     revision: int
-    chunks: list[dict] = Field(default_factory=list, max_length=1000)
+    chunks: list[dict] = Field(default_factory=list, max_length=10000)
     reset: bool = False
     chunk_size: int = Field(default=1500, ge=100, le=5000)
 

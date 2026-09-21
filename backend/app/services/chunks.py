@@ -16,10 +16,11 @@ class IndexImportRejected(ValueError):
 
 
 def validate(chunks, blocks):
-    if not chunks or len(chunks) > 1000:
-        raise ValueError('A document needs 1–1000 chunks')
+    if not chunks or len(chunks) > 10000:
+        raise ValueError('A draft needs 1–10000 chunks')
     known = {b['id']:b for b in blocks}
     ids = set()
+    total_chars = 0
     for index, chunk in enumerate(chunks):
         identifier = chunk.get('id', '')
         if not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', identifier) or identifier in ids:
@@ -27,6 +28,9 @@ def validate(chunks, blocks):
         ids.add(identifier)
         if chunk.get('order') != index or not chunk.get('content','').strip() or len(chunk['content']) > 12000:
             raise ValueError('Invalid chunk order or text length')
+        total_chars += len(chunk['content'])
+        if total_chars > 2000000:
+            raise ValueError('Draft text exceeds 2000000 characters')
         if not chunk.get('refs'):
             raise ValueError('Original source ranges are required')
         for ref in chunk['refs']:
@@ -122,6 +126,8 @@ def publish(document_id, revision, rollback=False, reviewed_diff=None):
             if not old:
                 raise HTTPException(409, 'No previous usable publication')
             chunks = old.chunks
+        if len(chunks) > 1000:
+            raise HTTPException(422, 'Reduce the draft to 1000 or fewer chunks before indexing')
         validate(chunks, doc.blocks)
         version = (db.scalar(select(func.max(store.Publication.version)).where(store.Publication.document_id==document_id)) or 0)+1
         publication = store.Publication(id=f'{doc.id}:{version}', document_id=doc.id, version=version,

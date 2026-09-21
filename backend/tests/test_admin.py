@@ -64,6 +64,31 @@ def test_rechunk_rejects_invalid_size(client, source, size):
     assert client.post('/api/library/' + source['id'] + '/draft', json={'revision': source['draft_revision'], 'reset': True, 'chunk_size': size}, headers=HEADERS).status_code == 422
 
 
+def test_large_draft_survives_session_expiry_and_requires_rechunk_before_indexing(client, source, monkeypatch):
+    monkeypatch.setattr(settings, 'CHUNK_INDEX_ENABLED', True)
+    monkeypatch.setattr(settings, 'CHUNK_DATA_STORE_ID', 'test-store')
+    login(client, 'editor')
+    path = '/api/library/' + source['id']
+    original = client.get(path).json()
+    chunks = [{**original['draft'][0], 'id':f'c{i+1}', 'order':i,
+               'content':f'Human-reviewed passage {i+1}'} for i in range(3781)]
+    saved = client.post(path + '/draft', json={'revision':original['draft_revision'], 'chunks':chunks}, headers=HEADERS)
+    assert saved.status_code == 200
+    assert saved.json()['draft_revision'] == 2 and len(saved.json()['draft']) == 3781
+    with store.session() as db:
+        revision = db.get(store.DraftRevision, source['id']+':2')
+        assert revision and revision.chunks[700]['content'] == 'Human-reviewed passage 701'
+    client.cookies.clear()
+    assert client.get(path).status_code == 401
+    login(client, 'editor')
+    reopened = client.get(path).json()
+    assert reopened['draft_revision'] == 2 and reopened['draft'][700] == chunks[700]
+    review = client.get(path + '/diff').json()
+    blocked = client.post(path + '/publish', json={'revision':2,'reviewed_diff':review['hash']}, headers=HEADERS)
+    assert blocked.status_code == 422 and '1000' in blocked.json()['detail']
+    assert client.get(path).json()['index_status'] == 'unpublished'
+
+
 def test_reader_cannot_edit_or_publish_shared_document(client, source):
     with store.session() as db:
         db.get(store.Document, source['id']).shared = True

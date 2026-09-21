@@ -1,6 +1,6 @@
 import {WorkspacePanel} from './WorkspacePanel';
 import {ReactNode, useEffect, useRef, useState} from 'react';
-import {api, apiList, jsonRequest} from '../lib/api';
+import {api, apiList, ApiError, jsonRequest} from '../lib/api';
 import {JobView} from './ArtifactPanel';
 import {useLocale} from '../lib/locale';
 import {ChunkDraftEditor} from './ChunkDraftEditor';
@@ -11,7 +11,7 @@ function LibraryFrame({standalone, editing, onClose, children}: {standalone:bool
   return <main className={`admin-library ${editing?'is-editing':''}`}><header className="admin-library-header"><div>{!editing&&<p className="eyebrow">City AI governance · Admin</p>}<h1>{t('adminTitle')}</h1></div><nav><a href="/">{t('returnResearch')}</a><a href="/admin/tools/">{t('aiTools')}</a></nav></header>{children}</main>;
 }
 
-export function Library({editor, admin=false, standalone=false, onClose}: {editor:boolean; admin?:boolean; standalone?:boolean; onClose:()=>void}) {
+export function Library({editor, admin=false, standalone=false, onClose, onSessionExpired, onDraftDirtyChange}: {editor:boolean; admin?:boolean; standalone?:boolean; onClose:()=>void; onSessionExpired?:()=>void; onDraftDirtyChange?:(dirty:boolean)=>void}) {
   const {t, lang, error: errorText, label} = useLocale();
   const [confirmation, setConfirmation] = useState<'reset'|'leave'|null>(null);
   const editorHeading = useRef<HTMLHeadingElement>(null);
@@ -38,7 +38,16 @@ export function Library({editor, admin=false, standalone=false, onClose}: {edito
   const [reflowMessage,setReflowMessage] = useState('');
   const loadDoc=(value:any)=>{setDoc(value);setSavedDraft(JSON.stringify(value.draft));setDiff('');setDiffHash('');setIndexed(null);setReflowUndo(null);setReflowMessage('');};
   useEffect(()=>{if(doc)editorHeading.current?.focus();},[doc?.id]);
+  useEffect(()=>{
+    if(!doc)return;
+    const timer=window.setInterval(()=>{void api('/api/auth/me').catch(error=>{
+      if(error instanceof ApiError && error.status===401)onSessionExpired?.();
+    });},60000);
+    return ()=>window.clearInterval(timer);
+  },[doc?.id]);
   const dirty=doc && JSON.stringify(doc.draft)!==savedDraft;
+  useEffect(()=>{onDraftDirtyChange?.(!!dirty);},[dirty,onDraftDirtyChange]);
+  useEffect(()=>()=>onDraftDirtyChange?.(false),[onDraftDirtyChange]);
   useEffect(()=>{
     if(!dirty)return;
     const warn=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue='';};
@@ -48,17 +57,17 @@ export function Library({editor, admin=false, standalone=false, onClose}: {edito
   useEffect(()=>setDiffHash(''),[doc]);
   const refresh = async () => {
     setLoading(true);
-    try {setDocs(await apiList('/api/library'));} catch(e:any) {setError(errorText(e));}
+    try {setDocs(await apiList('/api/library'));} catch(e:any) {setError(errorText(e));if(e instanceof ApiError && e.status===401)onSessionExpired?.();}
     finally {setLoading(false);}
   };
   const refreshLegacy = async () => {
     setLegacyError('');
-    try {setLegacy(await apiList('/api/library/legacy'));} catch(e:any) {setLegacyError(errorText(e));}
+    try {setLegacy(await apiList('/api/library/legacy'));} catch(e:any) {setLegacyError(errorText(e));if(e instanceof ApiError && e.status===401)onSessionExpired?.();}
   };
   useEffect(()=>{void refresh();void refreshLegacy();}, []);
   const run = async (action:()=>Promise<void>) => {
     setBusy(true);setError('');
-    try {await action();} catch(e:any) {setError(errorText(e));} finally {setBusy(false);}
+    try {await action();} catch(e:any) {setError(errorText(e));if(e instanceof ApiError && e.status===401)onSessionExpired?.();} finally {setBusy(false);}
   };
   const save = async (reset=false) => {
     await run(async()=>{
@@ -107,6 +116,7 @@ export function Library({editor, admin=false, standalone=false, onClose}: {edito
       </div>
       {reflowMessage&&<p role="status">{reflowMessage}</p>}
       <ChunkDraftEditor key={doc.id} chunks={doc.draft} blocks={doc.blocks||[]} onChange={mutateChunks}/>
+      {doc.draft.length>1000&&<p role="status">{t('draftOverIndexLimit',{count:doc.draft.length})}</p>}
       <div className="library-toolbar"><label>{t('chunkSize')}<input type="number" min="100" max="5000" value={chunkSize} onChange={e=>setChunkSize(Number(e.target.value))}/></label><button className="btn" disabled={!Number.isInteger(chunkSize)||chunkSize<100||chunkSize>5000} onClick={()=>setConfirmation('reset')}>{t('rechunk')}</button></div>
       <button className="btn" onClick={()=>save()}>{t('saveDraft')}</button>
       {dirty&&<p role="status">{t('unsaved')}</p>}
@@ -116,7 +126,7 @@ export function Library({editor, admin=false, standalone=false, onClose}: {edito
       {!doc.indexing_enabled&&<p>{t('indexingDisabled')}</p>}
       {doc.indexing_enabled&&<p>{t('indexWaiting')}</p>}
       {pending&&<p role="status">{t('pendingHint')}</p>}
-      <button className="btn btn-primary" disabled={!doc.indexing_enabled||dirty||!diffHash||pending} onClick={()=>run(async()=>{const task=await api(`/api/library/${doc.id}/publish`,jsonRequest({revision:doc.draft_revision,reviewed_diff:diffHash}));setJob(task.id);})}>{t('publish')}</button>
+      <button className="btn btn-primary" disabled={!doc.indexing_enabled||dirty||!diffHash||pending||doc.draft.length>1000} onClick={()=>run(async()=>{const task=await api(`/api/library/${doc.id}/publish`,jsonRequest({revision:doc.draft_revision,reviewed_diff:diffHash}));setJob(task.id);})}>{t('publish')}</button>
       <button className="btn" disabled={!doc.indexing_enabled||doc.published_version<2||pending||dirty} onClick={()=>run(async()=>{const task=await api(`/api/library/${doc.id}/rollback`,jsonRequest({revision:doc.draft_revision}));setJob(task.id);})}>{t('rollback')}</button>
       <button className="btn" disabled={!doc.published_version} onClick={()=>run(async()=>setIndexed(await api(`/api/library/${doc.id}/indexed-chunks`)))}>{t('checkIndex')}</button>
       {indexed&&<div><h3>{t(indexed.verified?'verified':'notVerified',{version:indexed.version})}</h3>{indexed.chunks.map((c:any)=><p key={c.id} dir="auto">{c.id} · {c.content}</p>)}</div>}
