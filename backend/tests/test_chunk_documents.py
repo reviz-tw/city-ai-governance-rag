@@ -94,6 +94,63 @@ def test_search_prefilters_permissions_and_rejects_stale_versions(source, monkey
         current_user.reset(token)
 
 
+def test_three_thousand_chunks_publish_after_all_search_pages_are_verified(source, monkeypatch):
+    doc = documents.get(source['id'])
+    draft = [{**doc.draft[0], 'id': f'c{i+1}', 'order': i,
+              'content': f'Reviewed passage {i+1}'} for i in range(3000)]
+    chunks.save(doc.id, doc.draft_revision, draft)
+    doc, task = start(source, monkeypatch)
+    fake_index(monkeypatch, doc)
+    request = chunks.cloud.request
+    with store.session() as db:
+        pub = db.get(store.Publication, doc.id + ':1')
+    records = chunks.manifest(doc, pub, 'gs://original/file')
+    pages = []
+    ready = [False]
+    def paginated(path, payload=None, method='GET', **kwargs):
+        if not path.endswith(':search'):
+            return request(path, payload, method, **kwargs)
+        offset = int(payload['pageToken'] or '0')
+        size = payload['pageSize']
+        assert size == 100
+        pages.append(offset)
+        assert documents.get(doc.id).published_version == 0
+        visible = records if ready[0] else records[:-1]
+        response = {'results': [{'document': record} for record in visible[offset:offset+size]]}
+        if offset + size < len(visible):
+            response['nextPageToken'] = str(offset + size)
+        return response
+    monkeypatch.setattr(chunks.cloud, 'request', paginated)
+    jobs.run(task['id'])
+    assert pages == list(range(0, 3000, 100))
+    assert jobs.get(task['id']).status == 'queued'
+    assert documents.get(doc.id).published_version == 0
+    ready[0] = True
+    pages.clear()
+    jobs.run(task['id'])
+    assert pages == list(range(0, 3000, 100))
+    assert jobs.get(task['id']).status == 'completed'
+    assert jobs.get(task['id']).result['verified_chunks'] == 3000
+    assert documents.get(doc.id).published_version == 1
+
+
+@pytest.mark.parametrize('has_next_page', [False, True])
+def test_search_rejects_excess_documents_even_on_the_last_page(source, monkeypatch, has_next_page):
+    doc, task = start(source, monkeypatch)
+    with store.session() as db:
+        pub = db.get(store.Publication, doc.id + ':1')
+    def paginated(path, payload, method):
+        offset = int(payload['pageToken'] or '0')
+        end = min(offset + payload['pageSize'], 3001)
+        response = {'results': [{'document': {'id': f'excess-{i}'}} for i in range(offset, end)]}
+        if end < 3001 or has_next_page:
+            response['nextPageToken'] = str(end)
+        return response
+    monkeypatch.setattr(chunks.cloud, 'request', paginated)
+    with pytest.raises(ValueError, match='Unexpected publication document count'):
+        chunks.search_publication(pub)
+
+
 def test_cleanup_failure_does_not_undo_promotion_and_is_retried(source, monkeypatch):
     doc, task = start(source, monkeypatch)
     fake_index(monkeypatch, doc)

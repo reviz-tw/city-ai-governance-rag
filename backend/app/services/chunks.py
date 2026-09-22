@@ -10,6 +10,8 @@ from app.core.config import settings
 from app.services import store, documents, cloud
 from app.services.auth import require_user, User, allowed_user
 
+MAX_PUBLICATION_CHUNKS = 3000
+
 
 class IndexImportRejected(ValueError):
     pass
@@ -126,8 +128,8 @@ def publish(document_id, revision, rollback=False, reviewed_diff=None):
             if not old:
                 raise HTTPException(409, 'No previous usable publication')
             chunks = old.chunks
-        if len(chunks) > 1000:
-            raise HTTPException(422, 'Reduce the draft to 1000 or fewer chunks before indexing')
+        if len(chunks) > MAX_PUBLICATION_CHUNKS:
+            raise HTTPException(422, f'Reduce the draft to {MAX_PUBLICATION_CHUNKS} or fewer chunks before indexing')
         validate(chunks, doc.blocks)
         version = (db.scalar(select(func.max(store.Publication.version)).where(store.Publication.document_id==document_id)) or 0)+1
         publication = store.Publication(id=f'{doc.id}:{version}', document_id=doc.id, version=version,
@@ -191,11 +193,11 @@ def search_publication(publication, checkpoint_fn=None):
         for item in response.get('results',[]):
             remote=item.get('document',{})
             found[remote.get('id')]=remote
+        if len(found)>MAX_PUBLICATION_CHUNKS:raise ValueError('Unexpected publication document count')
         page_token=response.get('nextPageToken')
         if not page_token:break
         if page_token in seen_tokens:raise ValueError('Search repeated its pagination token')
         seen_tokens.add(page_token)
-        if len(found)>1000:raise ValueError('Unexpected publication document count')
     return found
 
 

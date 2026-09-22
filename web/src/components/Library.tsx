@@ -4,6 +4,7 @@ import {api, apiList, ApiError, jsonRequest} from '../lib/api';
 import {JobView} from './ArtifactPanel';
 import {useLocale} from '../lib/locale';
 import {ChunkDraftEditor} from './ChunkDraftEditor';
+import {MAX_PUBLICATION_CHUNKS} from '../lib/chunks';
 
 function LibraryFrame({standalone, editing, onClose, children}: {standalone:boolean; editing:boolean; onClose:()=>void; children:ReactNode}) {
   const {t} = useLocale();
@@ -131,7 +132,7 @@ export function Library({editor, admin=false, standalone=false, onClose, onSessi
       </div>
       {reflowMessage&&<p role="status">{reflowMessage}</p>}
       <ChunkDraftEditor key={doc.id} chunks={doc.draft} blocks={doc.blocks||[]} onChange={mutateChunks}/>
-      {doc.draft.length>1000&&<p role="status">{t('draftOverIndexLimit',{count:doc.draft.length})}</p>}
+      {doc.draft.length>MAX_PUBLICATION_CHUNKS&&<p role="status">{t('draftOverIndexLimit',{count:doc.draft.length,limit:MAX_PUBLICATION_CHUNKS.toLocaleString(lang)})}</p>}
       <div className="library-toolbar"><label>{t('chunkSize')}<input type="number" min="100" max="5000" value={chunkSize} onChange={e=>setChunkSize(Number(e.target.value))}/></label><button className="btn" disabled={!Number.isInteger(chunkSize)||chunkSize<100||chunkSize>5000} onClick={()=>setConfirmation('reset')}>{t('rechunk')}</button></div>
       <button className="btn" onClick={()=>save()}>{t('saveDraft')}</button>
       {dirty&&<p role="status">{t('unsaved')}</p>}
@@ -141,7 +142,7 @@ export function Library({editor, admin=false, standalone=false, onClose, onSessi
       {!doc.indexing_enabled&&<p>{t('indexingDisabled')}</p>}
       {doc.indexing_enabled&&<p>{t('indexWaiting')}</p>}
       {pending&&<p role="status">{t('pendingHint')}</p>}
-      <button className="btn btn-primary" disabled={!doc.indexing_enabled||dirty||!diffHash||pending||doc.draft.length>1000} onClick={()=>run(async()=>{const task=await api(`/api/library/${doc.id}/publish`,jsonRequest({revision:doc.draft_revision,reviewed_diff:diffHash}));setJob(task.id);})}>{t('publish')}</button>
+      <button className="btn btn-primary" disabled={!doc.indexing_enabled||dirty||!diffHash||pending||doc.draft.length>MAX_PUBLICATION_CHUNKS} onClick={()=>run(async()=>{const task=await api(`/api/library/${doc.id}/publish`,jsonRequest({revision:doc.draft_revision,reviewed_diff:diffHash}));setJob(task.id);})}>{t('publish')}</button>
       <button className="btn" disabled={!doc.indexing_enabled||doc.published_version<2||pending||dirty} onClick={()=>run(async()=>{const task=await api(`/api/library/${doc.id}/rollback`,jsonRequest({revision:doc.draft_revision}));setJob(task.id);})}>{t('rollback')}</button>
       <button className="btn" disabled={!doc.published_version} onClick={()=>run(async()=>setIndexed(await api(`/api/library/${doc.id}/indexed-chunks`)))}>{t('checkIndex')}</button>
       {indexed&&<div><h3>{t(indexed.verified?'verified':'notVerified',{version:indexed.version})}</h3>{indexed.chunks.map((c:any)=><p key={c.id} dir="auto">{c.id} · {c.content}</p>)}</div>}

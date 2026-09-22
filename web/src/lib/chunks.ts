@@ -1,3 +1,5 @@
+export const MAX_PUBLICATION_CHUNKS = 3000;
+
 /** Prefer sentence boundaries; retain original ranges whenever the text is unchanged. */
 export function splitChunk(chunk: any, blocks: any[], newId: string) {
   const text: string = chunk.content;

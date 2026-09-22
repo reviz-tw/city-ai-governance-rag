@@ -7,7 +7,7 @@
 1. Editor／Admin 上傳原始 PDF、DOCX、TXT 或 Markdown。原始檔存入私有 GCS `managed-originals/{document_id}/{sha256}/...`，保留 SHA256、原始擷取 blocks 與頁碼。既有 `documents/` 來源沿用原連結。
 2. 自動切片依段落、斷句及約 1500 字上限處理，合併短段落並保留各原文範圍。短文件可小於 500 字。舊文件可使用「還原自動切片」產生新的 baseline。
 3. 來源文件庫並排顯示原文／頁碼及草稿；可以修正文句、合併、拆分、儲存草稿。文字未變更的拆分能縮小 refs；已修正文字無法精確對齊時保留較寬原文範圍，不捏造頁碼。
-4. 查看差異後，以當次 revision 與 diff hash 發布。版本快照與背景任務存入 PostgreSQL；每個 Chunk 產生獨立 TXT 及一筆 Document JSONL，寫入時使用 GCS generation 前置條件，拒絕覆寫不同內容。
+4. 查看差異後，以當次 revision 與 diff hash 發布。單次發布最多 3,000 個 Chunk；超過上限仍可儲存草稿，但須整理至上限內才可發布。版本快照與背景任務存入 PostgreSQL；每個 Chunk 產生獨立 TXT 及一筆 Document JSONL，寫入時使用 GCS generation 前置條件，拒絕覆寫不同內容。
 5. Cloud Tasks 以 `dataSchema: document`、`INCREMENTAL` 匯入。沿用既有佇列；operation 存入資料庫，每 120 秒續查同一個 operation，不因等待而重複匯入。預估約 10～30 分鐘，依 Vertex 佇列與索引狀態而定，並非保證時限。
 6. 匯入作業完成後，使用標準 Search 空查詢、publication filter 及分頁核對全部 Document IDs、版本、Chunk IDs、內容 hash。空查詢用於完整性核對，實際跨語語意能力另用有意義的研究問題驗收。新 metadata 尚未完成索引、暫時性服務錯誤會繼續等待。
 7. 全部符合後，以同一資料庫交易更新 Publication、Document 發布指標及 Job 完成狀態。等待／失敗／取消期間維持前版；首次發布尚未完成時，草稿不提供給 RAG。

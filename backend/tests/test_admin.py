@@ -86,8 +86,40 @@ def test_large_draft_survives_session_expiry_and_requires_rechunk_before_indexin
     assert reopened['draft_revision'] == 2 and reopened['draft'][700] == chunks[700]
     review = client.get(path + '/diff').json()
     blocked = client.post(path + '/publish', json={'revision':2,'reviewed_diff':review['hash']}, headers=HEADERS)
-    assert blocked.status_code == 422 and '1000' in blocked.json()['detail']
+    assert blocked.status_code == 422 and '3000' in blocked.json()['detail']
     assert client.get(path).json()['index_status'] == 'unpublished'
+
+
+@pytest.mark.parametrize('count, expected_status', [(3000, 200), (3001, 422)])
+def test_publication_limit_preserves_drafts_and_only_dispatches_allowed_size(client, source, monkeypatch, count, expected_status):
+    from app.services import jobs
+    monkeypatch.setattr(settings, 'CHUNK_INDEX_ENABLED', True)
+    monkeypatch.setattr(settings, 'CHUNK_DATA_STORE_ID', 'test-store')
+    submitted = []
+    monkeypatch.setattr(jobs, 'dispatch_job', lambda job: submitted.append(job.id))
+    login(client, 'editor')
+    path = '/api/library/' + source['id']
+    original = client.get(path).json()
+    passages = [{**original['draft'][0], 'id': f'c{i+1}', 'order': i,
+                 'content': f'Reviewed passage {i+1}'} for i in range(count)]
+    saved = client.post(path + '/draft', json={'revision': original['draft_revision'], 'chunks': passages}, headers=HEADERS)
+    assert saved.status_code == 200
+    revision = saved.json()['draft_revision']
+    review = client.get(path + '/diff').json()
+    result = client.post(path + '/publish', json={'revision': revision, 'reviewed_diff': review['hash']}, headers=HEADERS)
+    assert result.status_code == expected_status
+    current = client.get(path).json()
+    assert current['draft'] == passages and current['published_version'] == 0
+    with store.session() as db:
+        publication = db.get(store.Publication, source['id'] + ':1')
+        if expected_status == 200:
+            assert submitted == [result.json()['id']]
+            assert publication.chunks == passages and publication.status == 'pending'
+            assert current['index_status'] == 'pending'
+        else:
+            assert not submitted and publication is None
+            assert '3000' in result.json()['detail']
+            assert current['index_status'] == 'unpublished'
 
 
 def test_library_shows_durable_draft_save_and_latest_index_submission(client, source, monkeypatch):
