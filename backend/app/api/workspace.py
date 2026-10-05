@@ -210,3 +210,14 @@ def draft_revisions(document_id: str):
 def indexed_chunks(document_id: str):
     from app.services.chunks import indexed
     return indexed(document_id)
+
+class ReviewRequest(BaseModel):
+    version: int = Field(ge=1)
+
+@router.post('/library/{document_id}/my-review')
+def mark_my_review(document_id: str, body: ReviewRequest):
+    return documents.mark_reviewed(document_id, body.version)
+
+@router.delete('/library/{document_id}/my-review')
+def remove_my_review(document_id: str, body: ReviewRequest):
+    return documents.mark_reviewed(document_id, body.version, reviewed=False)

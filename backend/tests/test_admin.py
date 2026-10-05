@@ -59,6 +59,42 @@ def test_editor_can_rechunk_save_review_and_submit_index(client, source, monkeyp
     assert client.post(path + '/publish', json={'revision': draft['draft_revision'], 'reviewed_diff': review['hash']}, headers=HEADERS).status_code == 409
 
 
+def test_personal_review_requires_published_version_and_is_not_inferred_from_index(client, source):
+    login(client, 'editor')
+    path = '/api/library/' + source['id']
+    assert client.get(path).json()['my_review'] is None
+    assert client.post(path + '/my-review', json={'version': 1}, headers=HEADERS).status_code == 409
+    with store.session() as db:
+        doc = db.get(store.Document, source['id'])
+        doc.published_version, doc.index_status = 1, 'indexed'
+        db.add(store.Publication(id=f'{doc.id}:1', document_id=doc.id, version=1,
+                                 chunks=doc.draft, operator='automated-import', status='published'))
+        db.commit()
+    assert client.get(path).json()['my_review'] is None
+    marked = client.post(path + '/my-review', json={'version': 1}, headers=HEADERS)
+    assert marked.status_code == 200 and marked.json()['my_review']['version'] == 1
+    assert next(d for d in client.get('/api/library').json() if d['id'] == source['id'])['my_review']
+    login(client, 'admin')
+    assert client.get(path).json()['my_review'] is None
+    login(client, 'editor')
+    with store.session() as db:
+        doc = db.get(store.Document, source['id'])
+        db.add(store.Publication(id=f'{doc.id}:2', document_id=doc.id, version=2,
+                                 chunks=doc.draft, operator='automated-import', status='failed'))
+        db.commit()
+    assert client.get(path).json()['my_review']['version'] == 1
+    with store.session() as db:
+        doc = db.get(store.Document, source['id'])
+        doc.published_version = 2
+        db.get(store.Publication, f'{doc.id}:2').status = 'published'
+        db.commit()
+    assert client.get(path).json()['my_review'] is None
+    assert client.post(path + '/my-review', json={'version': 1}, headers=HEADERS).status_code == 409
+    assert client.post(path + '/my-review', json={'version': 2}, headers=HEADERS).status_code == 200
+    removed = client.request('DELETE', path + '/my-review', json={'version': 2}, headers=HEADERS)
+    assert removed.status_code == 200 and removed.json()['my_review'] is None
+
+
 @pytest.mark.parametrize('size', [0, 99, 5001])
 def test_rechunk_rejects_invalid_size(client, source, size):
     login(client, 'editor')

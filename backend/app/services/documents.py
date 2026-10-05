@@ -32,10 +32,10 @@ def get(document_id: str, user: User | None = None, *, edit=False):
 
 def extract(data: bytes, filename: str):
     blocks, warnings = [], []
-    def add(text, page=None, kind='paragraph', cells=None):
+    def add(text, page=None, kind='paragraph', cells=None, **extra):
         if text.strip():
             blocks.append(dict(id=f'p{len(blocks)+1}', text=text.strip(), page=page,
-                               kind=kind, cells=cells))
+                               kind=kind, cells=cells, **extra))
     ext = Path(filename).suffix.lower()
     if ext == '.pdf':
         reader = PdfReader(io.BytesIO(data))
@@ -54,13 +54,21 @@ def extract(data: bytes, filename: str):
         from docx.oxml.ns import qn
         from docx.table import Table
         from docx.text.paragraph import Paragraph
+        table_number = 0
         for child in doc.element.body:
             if child.tag == qn('w:p'):
                 paragraph = Paragraph(child, doc)
                 add(paragraph.text, kind='heading' if paragraph.style.name.startswith('Heading') else 'paragraph')
             elif child.tag == qn('w:tbl'):
-                rows = [[cell.text for cell in row.cells] for row in Table(child, doc).rows]
-                add('\n'.join('\t'.join(row) for row in rows), kind='table', cells=rows)
+                table_number += 1
+                for row_number, row in enumerate(Table(child, doc).rows, 1):
+                    cells, seen = [], set()
+                    for cell in row.cells:
+                        if cell._tc not in seen:
+                            seen.add(cell._tc)
+                            cells.append(cell.text)
+                    add('\t'.join(cells), kind='table', cells=[cells],
+                        table_id=table_number, table_row=row_number)
     elif ext in {'.txt', '.md'}:
         for paragraph in re.split(r'\n\s*\n', data.decode('utf-8')):
             add(paragraph, kind='heading' if paragraph.startswith('#') else 'paragraph')
@@ -75,8 +83,73 @@ def extract(data: bytes, filename: str):
 
 def baseline(blocks, limit=1500, *, reflow_pdf=False):
     chunks = []
+    header = None
+    header_ref = None
+
+    def source_ref(block, start=0, end=None):
+        return dict(block_id=block['id'], start=start,
+                    end=len(block['text']) if end is None else end, page=block['page'])
+
+    def add_table_row(block, value, refs, row_number=None, labels=None):
+        # One row is the semantic unit. Long rows split between fields; every
+        # fragment keeps its row/column context and source citation.
+        prefix = f'第 {row_number} 列\n' if row_number else ''
+        if labels is not None:
+            fields = [(f'{labels[i].strip()}：' if i < len(labels) and labels[i].strip() else '', cell)
+                      for i, cell in enumerate(value.split('\t')) if cell.strip()]
+        else:
+            fields = [('', line) for line in value.split('\n')]
+        pieces = []
+        for label, field in fields:
+            field = field.strip()
+            if not field:
+                continue
+            width = max(1, limit - len(prefix) - len(label))
+            while len(field) > width:
+                end = width
+                boundary = max(field.rfind('\n', width // 2, end),
+                               field.rfind('。', width // 2, end), field.rfind(' ', width // 2, end))
+                if boundary > 0:
+                    end = boundary + 1
+                pieces.append(label + field[:end].strip())
+                field = field[end:].strip()
+            if field:
+                pieces.append(label + field)
+        current = prefix
+        for piece in pieces:
+            if len(current) + len(piece) + (1 if current and not current.endswith('\n') else 0) > limit and current.strip():
+                chunks.append(dict(content=current.strip(), refs=refs, algorithm='table-row-v1'))
+                current = prefix
+            current += ('' if not current or current.endswith('\n') else '\n') + piece
+        if current.strip():
+            chunks.append(dict(content=current.strip(), refs=refs, algorithm='table-row-v1'))
+
     for block in blocks:
         text = block['text']
+        if block.get('kind') == 'table':
+            rows = block.get('cells') or []
+            if rows:
+                if len(rows) > 1:
+                    header = rows[0]
+                    header_ref = source_ref(block)
+                    for index, row in enumerate(rows):
+                        value = '\t'.join(row)
+                        add_table_row(block, value, [source_ref(block)], index + 1,
+                                      header if index else None)
+                else:
+                    row_number = block.get('table_row')
+                    if row_number == 1:
+                        header, header_ref = rows[0], source_ref(block)
+                    refs = ([header_ref] if header and row_number != 1 and header_ref else []) + [source_ref(block)]
+                    add_table_row(block, '\t'.join(rows[0]), refs, row_number,
+                                  header if header and row_number != 1 else None)
+            else:
+                # Spreadsheet rows are already labelled with their sheet and
+                # column names by the importer. Keep each row independent.
+                header = header_ref = None
+                add_table_row(block, text, [source_ref(block)])
+            continue
+        header = header_ref = None
         offsets = list(range(len(text)))
         if reflow_pdf and block.get('kind') not in {'table', 'heading', 'code'}:
             text, offsets = reflow(text)
@@ -95,17 +168,21 @@ def baseline(blocks, limit=1500, *, reflow_pdf=False):
                                    refs=[dict(block_id=block['id'], start=offsets[start], end=offsets[end-1]+1, page=block['page'])],
                                    algorithm='paragraph-v1'))
             start = end
-    # Pack short adjacent paragraphs while retaining exact original source ranges.
+    # Pack prose only. Tables must not absorb adjacent prose or other rows.
     packed=[]
     for chunk in chunks:
-        if packed and len(packed[-1]['content'])+2+len(chunk['content'])<=limit:
+        if (packed and chunk['algorithm'] != 'table-row-v1' and
+                packed[-1]['algorithm'] != 'table-row-v1' and
+                len(packed[-1]['content'])+2+len(chunk['content'])<=limit):
             packed[-1]['content']+='\n\n'+chunk['content']
             packed[-1]['refs'].extend(chunk['refs'])
         else:
-            packed.append(dict(chunk,id=f'c{len(packed)+1}',order=len(packed),algorithm='paragraph-v2'))
+            packed.append(dict(chunk,id=f'c{len(packed)+1}',order=len(packed),
+                               algorithm=chunk['algorithm'] if chunk['algorithm']=='table-row-v1' else 'paragraph-v2'))
     if reflow_pdf:
         for chunk in packed:
-            chunk['algorithm'] = 'pdf-reflow-v1'
+            if chunk['algorithm'] != 'table-row-v1':
+                chunk['algorithm'] = 'pdf-reflow-v1'
     return packed
 
 
@@ -142,7 +219,8 @@ def activity_for_documents(db, document_ids):
     """Summarize durable saves and submissions without loading revision contents."""
     if not document_ids:
         return {}
-    activity = {document_id: {'last_draft_saved_at': None, 'last_index_submission': None}
+    activity = {document_id: {'last_draft_saved_at': None, 'last_index_submission': None,
+                              'my_review': None}
                 for document_id in document_ids}
     saved = db.execute(select(store.DraftRevision.document_id, func.max(store.DraftRevision.created_at))
                        .where(store.DraftRevision.document_id.in_(document_ids))
@@ -160,7 +238,39 @@ def activity_for_documents(db, document_ids):
     for document_id, version, submitted_at, status in submissions:
         activity[document_id]['last_index_submission'] = dict(version=version, submitted_at=submitted_at,
                                                               status=status)
+    current = {document_id: (version, status) for document_id, version, status in db.execute(
+        select(store.Document.id, store.Document.published_version, store.Document.index_status)
+        .where(store.Document.id.in_(document_ids)))}
+    reviewer_id = require_user().id
+    for review in db.scalars(select(store.DocumentReview).where(
+            store.DocumentReview.document_id.in_(document_ids),
+            store.DocumentReview.reviewer_id == reviewer_id)):
+        version, status = current.get(review.document_id, (0, 'unpublished'))
+        if version == review.version and status in {'indexed', 'indexed_cleanup_pending'}:
+            activity[review.document_id]['my_review'] = dict(version=review.version,
+                                                             reviewed_at=review.reviewed_at)
     return activity
+
+
+def mark_reviewed(document_id: str, version: int, *, reviewed: bool = True):
+    """Record only the signed-in editor's explicit acknowledgement of the live version."""
+    user = require_editor()
+    get(document_id, user, edit=True)
+    with store.session() as db:
+        doc = db.scalar(select(store.Document).where(store.Document.id == document_id).with_for_update())
+        publication = db.get(store.Publication, f'{document_id}:{version}')
+        if (doc.published_version != version or doc.index_status not in
+                {'indexed', 'indexed_cleanup_pending'} or not publication or publication.status != 'published'):
+            raise HTTPException(409, 'Published version changed; verify the current index before reviewing')
+        key = f'{document_id}:{version}:{hashlib.sha256(user.id.encode()).hexdigest()[:32]}'
+        existing = db.get(store.DocumentReview, key)
+        if reviewed and existing is None:
+            db.add(store.DocumentReview(id=key, document_id=document_id, version=version,
+                                        reviewer_id=user.id, reviewer_email=user.email))
+        elif not reviewed and existing is not None:
+            db.delete(existing)
+        db.commit()
+        return describe(doc, include_content=True)
 
 
 def describe(doc, include_content=False, activity=None):
@@ -169,7 +279,8 @@ def describe(doc, include_content=False, activity=None):
     result = dict(id=doc.id, title=doc.title, language=doc.language, original_hash=doc.original_hash,
                   metadata=doc.metadata_json, warnings=doc.extraction_warnings,
                   draft_revision=doc.draft_revision, published_version=doc.published_version,
-                  index_status=doc.index_status, shared=doc.shared, editable=editable)
+                  index_status=doc.index_status, shared=doc.shared, editable=editable,
+                  has_structured_tables=any(b.get('kind') == 'table' for b in doc.blocks))
     if activity is None:
         with store.session() as db:
             activity = activity_for_documents(db, [doc.id])[doc.id]

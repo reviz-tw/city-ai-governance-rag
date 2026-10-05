@@ -44,6 +44,16 @@ class Publication(Base):
     status: Mapped[str] = mapped_column(String(30), default='pending')
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+class DocumentReview(Base):
+    """An explicit person's review of one immutable published version."""
+    __tablename__ = 'document_reviews'
+    id: Mapped[str] = mapped_column(String(300), primary_key=True)
+    document_id: Mapped[str] = mapped_column(String(100), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    reviewer_id: Mapped[str] = mapped_column(String(200), index=True)
+    reviewer_email: Mapped[str] = mapped_column(String(320))
+    reviewed_at: Mapped[float] = mapped_column(Float, default=time.time)
+
 class Job(Base):
     __tablename__ = 'jobs'
     id: Mapped[str] = mapped_column(String(100), primary_key=True)

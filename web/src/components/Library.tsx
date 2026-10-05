@@ -39,6 +39,7 @@ export function Library({editor, admin=false, standalone=false, onClose, onSessi
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState('');
+  const [reviewFilter, setReviewFilter] = useState<'all'|'pending'|'reviewed'>('all');
   const [file, setFile] = useState<File|null>(null);
   const [rights, setRights] = useState(false);
   const [cleaned, setCleaned] = useState('');
@@ -111,16 +112,17 @@ export function Library({editor, admin=false, standalone=false, onClose, onSessi
       <label><input type="checkbox" checked={rights} onChange={e=>setRights(e.target.checked)}/>{t('rights')}</label>
       <button className="btn" disabled={!file||!rights} onClick={()=>run(async()=>{if(!file)return;const form=new FormData();form.append('file',file);form.append('rights_confirmed','true');form.append('language',language);form.append('city',city);if(cleaned)form.append('cleaned_text',cleaned);const d=await api('/api/library',{method:'POST',body:form});loadDoc(await api(`/api/library/${d.id}`));await refresh();})}>{t('uploadDraft')}</button>
     </details>}
-    <div className="library-toolbar"><label>{t('searchDocuments')}<input value={filter} onChange={e=>setFilter(e.target.value)} placeholder={t('searchDocuments')}/></label><button className="btn" onClick={()=>run(async()=>{await refresh();await refreshLegacy();})}>{t('refresh')}</button></div>
+    <div className="library-toolbar"><label>{t('searchDocuments')}<input value={filter} onChange={e=>setFilter(e.target.value)} placeholder={t('searchDocuments')}/></label><label>{t('reviewFilter')}<select value={reviewFilter} onChange={e=>setReviewFilter(e.target.value as 'all'|'pending'|'reviewed')}><option value="all">{t('reviewAll')}</option><option value="pending">{t('reviewPending')}</option><option value="reviewed">{t('reviewDone')}</option></select></label><button className="btn" onClick={()=>run(async()=>{await refresh();await refreshLegacy();})}>{t('refresh')}</button></div>
     {loading && <p role="status">{t('loading')}</p>}
     {!loading && !docs.length && !legacy.length && !error && !legacyError && <p className="empty-panel">{t('noDocuments')}</p>}
-    {docs.filter(d=>matches(d.title)).map(d=><div key={d.id} className="library-row"><div><strong>{d.title}</strong><p>{d.language} · {label(d.index_status)} · {t('publishedVersion',{version:d.published_version})} · {t('draftRevision',{revision:d.draft_revision})}</p><DocumentActivity document={d}/></div><div className="library-actions"><a className="btn btn-secondary" href={`/api/library/${d.id}/original`} target="_blank" rel="noreferrer">{t('openOriginal')}</a>{d.editable&&<button className="btn btn-ghost" onClick={()=>openDocument(d.id)}>{t('editChunks')}</button>}</div></div>)}
+    {docs.filter(d=>matches(d.title) && (reviewFilter==='all' || (reviewFilter==='reviewed')===!!d.my_review)).map(d=><div key={d.id} className="library-row"><div><strong>{d.title}</strong><p>{d.language} · {label(d.index_status)} · <span className={d.my_review?'review-done':'review-pending'}>{t(d.my_review?'reviewDone':'reviewPending')}</span> · {t('publishedVersion',{version:d.published_version})} · {t('draftRevision',{revision:d.draft_revision})}{d.has_structured_tables&&<> · {t('tableSource')}</>}</p><DocumentActivity document={d}/></div><div className="library-actions"><a className="btn btn-secondary" href={`/api/library/${d.id}/original`} target="_blank" rel="noreferrer">{t('openOriginal')}</a>{d.editable&&<button className="btn btn-ghost" onClick={()=>openDocument(d.id)}>{t('editChunks')}</button>}</div></div>)}
     {legacyError && <p role="alert">{legacyError}</p>}
     {historical.length>0 && <details><summary>{t('historical',{count:historical.length})}</summary><p>{t('historicalHint')}</p>{historical.map(item=><div className="library-row" key={item.filename}><div><strong>{item.filename}</strong><p>{item.language} · {t('legacy-index')}</p></div>{admin&&<button className="btn" onClick={()=>{
       void run(async()=>{loadDoc(await api('/api/library/legacy-draft',jsonRequest({filename:item.filename})));await refresh();});
     }}>{t('openDraft')}</button>}</div>)}</details>}
     </>}
-    {doc?.editable && editor && <section className="chunk-editor" aria-label={t('editor')}><button className="btn btn-secondary" onClick={()=>dirty?setConfirmation('leave'):setDoc(null)}>{t('back')}</button><h2 tabIndex={-1} ref={editorHeading}>{doc.title} · {t('draftRevision',{revision:doc.draft_revision})}</h2><p>{label(doc.index_status)} · {t('publishedVersion',{version:doc.published_version})}</p><DocumentActivity document={doc}/>
+    {doc?.editable && editor && <section className="chunk-editor" aria-label={t('editor')}><button className="btn btn-secondary" onClick={()=>dirty?setConfirmation('leave'):setDoc(null)}>{t('back')}</button><h2 tabIndex={-1} ref={editorHeading}>{doc.title} · {t('draftRevision',{revision:doc.draft_revision})}</h2><p>{label(doc.index_status)} · {t('publishedVersion',{version:doc.published_version})} · <span className={doc.my_review?'review-done':'review-pending'}>{t(doc.my_review?'reviewDone':'reviewPending')}</span>{doc.has_structured_tables&&<> · {t('tableSource')}</>}</p><DocumentActivity document={doc}/>
+      <p>{t('reviewHint')}</p>
       {doc.warnings?.length>0 && <p>{t('extractionNote')}</p>}
       <div className="chunk-reflow-tools"><button className="btn btn-secondary" onClick={()=>run(async()=>{
         const result=await api(`/api/library/${doc.id}/preview-reflow`,jsonRequest({revision:doc.draft_revision,chunks:doc.draft}));
@@ -146,6 +148,7 @@ export function Library({editor, admin=false, standalone=false, onClose, onSessi
       <button className="btn" disabled={!doc.indexing_enabled||doc.published_version<2||pending||dirty} onClick={()=>run(async()=>{const task=await api(`/api/library/${doc.id}/rollback`,jsonRequest({revision:doc.draft_revision}));setJob(task.id);})}>{t('rollback')}</button>
       <button className="btn" disabled={!doc.published_version} onClick={()=>run(async()=>setIndexed(await api(`/api/library/${doc.id}/indexed-chunks`)))}>{t('checkIndex')}</button>
       {indexed&&<div><h3>{t(indexed.verified?'verified':'notVerified',{version:indexed.version})}</h3>{indexed.chunks.map((c:any)=><p key={c.id} dir="auto">{c.id} · {c.content}</p>)}</div>}
+      {doc.my_review?<button className="btn" onClick={()=>run(async()=>{loadDoc(await api(`/api/library/${doc.id}/my-review`,jsonRequest({version:doc.published_version},'DELETE')));await refresh();})}>{t('unreviewAction')}</button>:<button className="btn" disabled={!indexed?.verified||indexed.version!==doc.published_version||pending} onClick={()=>run(async()=>{loadDoc(await api(`/api/library/${doc.id}/my-review`,jsonRequest({version:doc.published_version})));await refresh();})}>{t('reviewAction')}</button>}
     </section>}
     {confirmation && <div className="inline-confirmation" role="alert"><p>{t(confirmation==='reset'?'resetPrompt':'leavePrompt')}</p><button className="btn btn-primary" onClick={()=>{if(confirmation==='reset')void save(true);else setDoc(null);setConfirmation(null);}}>{t('confirm')}</button><button className="btn" onClick={()=>setConfirmation(null)}>{t('cancel')}</button></div>}
     </fieldset>

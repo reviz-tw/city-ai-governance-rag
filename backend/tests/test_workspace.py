@@ -206,9 +206,27 @@ def test_docx_extraction_keeps_heading_table_and_paragraph_order():
     word.add_paragraph('Automatic approval is prohibited.')
     data=io.BytesIO();word.save(data)
     blocks,warnings=documents.extract(data.getvalue(),'policy.docx')
-    assert [b['kind'] for b in blocks]==['heading','table','paragraph']
-    assert blocks[1]['cells']==[['Period','Cases'],['2026','20']]
-    assert blocks[2]['text']=='Automatic approval is prohibited.' and not warnings
+    assert [b['kind'] for b in blocks]==['heading','table','table','paragraph']
+    assert blocks[1]['cells']==[['Period','Cases']]
+    assert blocks[2]['cells']==[['2026','20']]
+    assert blocks[3]['text']=='Automatic approval is prohibited.' and not warnings
+    draft=documents.baseline(blocks,limit=100)
+    chunks.validate(draft,blocks)
+    assert any('Period：2026' in c['content'] and 'Cases：20' in c['content'] for c in draft)
+    assert all(not ('Automatic approval' in c['content'] and 'Cases：20' in c['content']) for c in draft)
+
+
+def test_long_table_row_splits_on_fields_and_keeps_header_and_row_refs():
+    blocks=[dict(id='p1',text='Name\tAssessment',page=2,kind='table',cells=[['Name','Assessment']],table_row=1),
+            dict(id='p2',text='Case A\t'+'important evidence. '*35,page=2,kind='table',
+                 cells=[['Case A','important evidence. '*35]],table_row=2)]
+    draft=documents.baseline(blocks,limit=100)
+    chunks.validate(draft,blocks)
+    row_chunks=[c for c in draft if '第 2 列' in c['content']]
+    assert len(row_chunks)>2
+    assert all(len(c['content'])<=100 for c in row_chunks)
+    assert all({r['block_id'] for r in c['refs']}=={'p1','p2'} for c in row_chunks)
+    assert all('第 2 列' in c['content'] for c in row_chunks)
 
 
 def test_scanned_page_warning_cannot_be_bypassed_for_full_translation(monkeypatch):
