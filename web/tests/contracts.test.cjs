@@ -65,7 +65,19 @@ test('Every panel label has all six locales with consistent substitutions',()=>{
   assert.equal(panelError({status:403}),'denied');
   assert.equal(panelError({status:401}),'expired');
 });
-const {answerEvidence}=load('src/lib/answer-artifact.ts');
+const {answerEvidence,citationIds}=load('src/lib/answer-artifact.ts');
+test('Live model citation formats select only cited sources for output actions',()=>{
+  const citations=[{citation_id:1,document_id:'taipei',block_ids:['p1']},{citation_id:2,document_id:'taoyuan',block_ids:['p2']},{citation_id:3,document_id:'unused'}];
+  for(const content of ['Evidence [citation:1] and [citation:1, citation:2].','Evidence [1, 2].','Evidence [citation:1, 2].']) {
+    const evidence=answerEvidence({id:'live-answer',content,citations});
+    assert.deepEqual(evidence.source_ids,['taipei','taoyuan']);
+    assert.deepEqual(evidence.source_passages,{taipei:['p1'],taoyuan:['p2']});
+  }
+  assert.deepEqual(citationIds('[citation:1, citation:2]'),[1,2]);
+  assert.deepEqual(citationIds('[1, 2]'),[1,2]);
+  assert.deepEqual(citationIds('[citation:1, invalid]'),[]);
+  assert.deepEqual(answerEvidence({id:'a',content:'Unknown [citation:99]',citations}).source_ids,[]);
+});
 test('Output actions bind to the selected answer and deduplicate its original passages',()=>{
   const answer={id:'earlier-answer',content:'Earlier answer [1] [2] [3]',citations:[{citation_id:1,document_id:'a',block_ids:['p1']},{citation_id:2,document_id:'a',block_ids:['p1','p2']},{citation_id:3,document_id:'b',block_ids:['p4']},{citation_id:4,document_id:'unused',block_ids:['p9']}]};
   assert.deepEqual(answerEvidence(answer),{scope:'answer',message_ids:['earlier-answer'],source_ids:['a','b'],source_passages:{a:['p1','p2'],b:['p4']},context:'Earlier answer [1] [2] [3]'});

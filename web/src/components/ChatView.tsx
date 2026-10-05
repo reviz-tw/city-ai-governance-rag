@@ -4,7 +4,7 @@ import {ChatMessage, Citation} from '../types';
 import {UIStrings} from '../i18n';
 import {CONTENT_LANGUAGES, InterfaceLanguage} from '../lib/languages';
 import {researchCopy} from '../lib/research-copy';
-import {answerEvidence} from '../lib/answer-artifact';
+import {answerEvidence, CITATION_MARKER, citationIds} from '../lib/answer-artifact';
 import {useLocale} from '../lib/locale';
 import {WorkspacePanel} from './WorkspacePanel';
 
@@ -65,11 +65,13 @@ export function ChatView({t, lang, messages, loading, onSendMessage, onClearHist
       clearTimeout(copyTimer.current); copyTimer.current = setTimeout(() => setCopiedId(''), 2000);
     } catch {setCopyError(c.copyError);}
   };
-  const inline = (text: string, message: ChatMessage) => text.split(/(\*\*.*?\*\*|\[\d+\])/g).map((part, index) => {
+  const inline = (text: string, message: ChatMessage) => text.split(new RegExp(`(\\*\\*.*?\\*\\*|${CITATION_MARKER.source})`, 'gi')).map((part, index) => {
     if (part.startsWith('**') && part.endsWith('**')) return <strong key={index}>{part.slice(2,-2)}</strong>;
-    const match = part.match(/^\[(\d+)\]$/);
-    const citation = match && message.citations?.find(item => item.citation_id === Number(match[1]));
-    if (citation) return <button key={index} className="citation-chip" aria-label={`${t.sourceCitationBadge} ${citation.citation_id}: ${citation.title}`} aria-pressed={sourceMessage?.id === message.id && selectedCitation === citation.citation_id} onClick={() => showSources(message, citation)}>{citation.citation_id}</button>;
+    const ids = citationIds(part);
+    if (ids.length) return <span key={index}>{ids.map((id, position) => {
+      const citation = message.citations?.find(item => item.citation_id === id);
+      return citation ? <button key={position} className="citation-chip" aria-label={`${t.sourceCitationBadge} ${citation.citation_id}: ${citation.title}`} aria-pressed={sourceMessage?.id === message.id && selectedCitation === citation.citation_id} onClick={() => showSources(message, citation)}>{citation.citation_id}</button> : <span key={position}>[{id}]</span>;
+    })}</span>;
     return part;
   });
   const formatted = (message: ChatMessage) => message.content.split('\n').map((line, index) => {
