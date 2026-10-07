@@ -27,3 +27,5 @@ Docling 2.134.0／docling-core 2.100.0 在獨立 worker 執行；網站不安裝
 `--cloud --enqueue` 將尚未完成的文件交給部署後的 Cloud Tasks／Docling pipeline；已更新文件會跳過，可重用的候選稿會直接套用或保留人工草稿。批次任務由管理員建立，解析完成後僅對未 review 且未人工修改的草稿自動套用，保護規則與本機重跑相同。
 
 `DOCLING_TASKS_QUEUE` 可指定獨立的文件處理 queue，建議 maxConcurrentDispatches=2，配合處理器最多兩個 instance；不佔滿原有投影片與 PDF 輸出 queue。任務及結果保存在既有 jobs 表，可從管理介面的「我的產出」查看。排程報告保存 document ID／job ID，供後續核對完成數與失敗原因。
+
+處理器滿載（429）或暫時不可用（5xx）時，背景工作會保留原始檔與草稿，延後重試；退避由 60 秒逐步增加至 600 秒，最多 12 次，且每次仍核對帳號、來源 hash、草稿版本及 review 狀態。解析錯誤不會標記成功。

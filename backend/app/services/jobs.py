@@ -502,6 +502,17 @@ def run(job_id):
         store.delete_prefix(f'jobs/{job.id}/')
         return
     except Exception as exc:
+        from app.services.docling_pipeline import DoclingBusy
+        if job.kind=='rechunk' and isinstance(exc,DoclingBusy):
+            with store.session() as db:
+                active=db.get(store.Job,job.id)
+                if not active or active.status!='running' or active.attempt!=job.attempt:return
+                retries=active.payload.get('docling_retry_count',0)
+                if retries<12:
+                    active.payload={**active.payload,'docling_retry_count':retries+1}
+                    db.commit()
+                    defer(job,delay=min(60*2**retries,600))
+                    return
         logger.warning('job_failed id=%s kind=%s', job.id, type(exc).__name__)
         if isinstance(exc, slide_authoring.SlideQualityError):
             logger.warning('slide_quality_failed id=%s stage=%s', job.id, exc.stage)

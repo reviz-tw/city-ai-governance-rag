@@ -11,6 +11,11 @@ from pathlib import Path
 from fastapi import HTTPException
 from app.core.config import settings
 
+class DoclingBusy(HTTPException):
+    """Retryable processor capacity or transport failure; source is unchanged."""
+    def __init__(self,message='Document processor temporarily unavailable'):
+        super().__init__(503,message,headers={'Retry-After':'60'})
+
 
 _local=threading.local()
 _workers=[]
@@ -68,6 +73,7 @@ def parse(data,filename,*,source_uri=None):
         else:
             response=requests.post(url+'/parse',headers={'Authorization':'Bearer '+token},
                 files={'file':(Path(filename).name,data)},data={'max_tokens':settings.DOCLING_CHUNK_TOKENS},timeout=1200)
+        if response.status_code in {429,500,502,503,504}:raise DoclingBusy('Document processor temporarily unavailable')
         if response.status_code!=200:raise HTTPException(422,'Docling parsing failed; original retained')
         result=response.json()
     else:

@@ -151,6 +151,8 @@ def test_large_stored_source_uses_trusted_storage_not_http_upload(monkeypatch):
     assert docling_pipeline.parse(data,'report.pdf',source_uri='gs://managed-sources/managed-originals/report.pdf')==payload
     with pytest.raises(HTTPException):docling_pipeline.parse(data,'report.pdf',source_uri='gs://other/documents/report.pdf')
     with pytest.raises(HTTPException):docling_pipeline.parse(data,'report.pdf')
+    Response.status_code=429
+    with pytest.raises(docling_pipeline.DoclingBusy):docling_pipeline.parse(data,'report.pdf',source_uri=uri)
 
 
 def test_large_managed_original_normalizes_its_existing_storage_key(source,parser,monkeypatch):
@@ -165,3 +167,21 @@ def test_large_managed_original_normalizes_its_existing_storage_key(source,parse
     monkeypatch.setattr(docling_pipeline,'parse',parse)
     assert rechunk.generate(source['id'])['status']=='ready'
     assert captured['source_uri'].startswith('gs://managed-sources/managed-originals/')
+
+
+def test_busy_processor_defers_job_without_changing_source(source,parser,monkeypatch):
+    original=documents.get(source['id'])
+    job=rechunk.enqueue(source['id'],source['draft_revision'])
+    def busy(*args,**kwargs):raise docling_pipeline.DoclingBusy('Busy')
+    monkeypatch.setattr(docling_pipeline,'parse',busy)
+    jobs.run(job['id'])
+    with store.session() as db:
+        active=db.get(store.Job,job['id'])
+        assert active.status=='queued' and active.error is None
+        assert active.payload['docling_retry_count']==1 and active.payload['resume_at']>active.updated_at
+        active.payload={k:v for k,v in active.payload.items() if k!='resume_at'};db.commit()
+    assert documents.get(source['id']).draft==original.draft
+    assert rechunk.list_proposals(source['id'])==[]
+    monkeypatch.setattr(docling_pipeline,'parse',parser)
+    jobs.run(job['id'])
+    assert jobs.get(job['id']).status=='completed'
