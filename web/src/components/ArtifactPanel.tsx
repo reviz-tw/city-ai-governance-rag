@@ -50,7 +50,7 @@ export function JobView({id, onClose}: {id: string; onClose: () => void}) {
     {error && <p role="alert">{error}</p>}
     {job && <><p className="job-status">{label(job.status)} · {job.progress}%</p><progress className="job-progress" value={job.progress} max={100} aria-label={t('progress')}/>
       {job.kind==='rechunk'&&['queued','running'].includes(job.status)&&<p>正在解析文件並產生 Docling 候選稿。</p>}
-      {job.kind==='rechunk'&&job.status==='completed'&&<p>Docling 候選稿已完成，共 {job.result?.chunks} 片。關閉後可在文件編輯畫面預覽與套用。</p>}
+      {job.kind==='rechunk'&&job.status==='completed'&&<p>{['applied','already-updated'].includes(job.result?.status)?`Docling 草稿已更新，共 ${job.result?.chunks} 片。原始檔與發布版本已保留。`:job.result?.status==='manual-draft-preserved'?`已保留人工草稿，另存 ${job.result?.chunks} 片的 Docling 候選稿，可在文件編輯畫面預覽。`:`Docling 候選稿已完成，共 ${job.result?.chunks} 片。關閉後可在文件編輯畫面預覽與套用。`}</p>}
       {job.kind==='index'&&['queued','running'].includes(job.status)&&<p>{t('indexWaiting')}</p>}
       {job.kind==='index'&&job.status==='completed'&&<p>{t('indexDone',{version:job.result?.published_version,count:job.result?.verified_chunks})}</p>}
       {job.stale && <p role="alert">{t('stale')}</p>}
