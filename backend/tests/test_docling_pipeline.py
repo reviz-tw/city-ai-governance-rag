@@ -147,5 +147,21 @@ def test_large_stored_source_uses_trusted_storage_not_http_upload(monkeypatch):
     assert docling_pipeline.parse(data,'report.pdf',source_uri=uri)==payload
     assert captured['url'].endswith('/parse-source') and captured['json']['source_uri']==uri
     assert 'files' not in captured
+    monkeypatch.setattr(settings,'ARTIFACT_GCS_BUCKET','managed-sources')
+    assert docling_pipeline.parse(data,'report.pdf',source_uri='gs://managed-sources/managed-originals/report.pdf')==payload
     with pytest.raises(HTTPException):docling_pipeline.parse(data,'report.pdf',source_uri='gs://other/documents/report.pdf')
     with pytest.raises(HTTPException):docling_pipeline.parse(data,'report.pdf')
+
+
+def test_large_managed_original_normalizes_its_existing_storage_key(source,parser,monkeypatch):
+    monkeypatch.setattr(settings,'DOCLING_SERVICE_URL','https://processor.example.test')
+    monkeypatch.setattr(settings,'ARTIFACT_GCS_BUCKET','managed-sources')
+    data=b'x'*(21*1024*1024)
+    with store.session() as db:
+        db.get(store.Document,source['id']).original_hash=hashlib.sha256(data).hexdigest();db.commit()
+    monkeypatch.setattr(store,'get_bytes',lambda key:data)
+    captured={}
+    def parse(data,filename,**kwargs):captured.update(kwargs);return parser(data,filename)
+    monkeypatch.setattr(docling_pipeline,'parse',parse)
+    assert rechunk.generate(source['id'])['status']=='ready'
+    assert captured['source_uri'].startswith('gs://managed-sources/managed-originals/')

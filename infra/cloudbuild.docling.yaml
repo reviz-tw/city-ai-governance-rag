@@ -9,7 +9,7 @@ steps:
     args: [push, --all-tags, '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/city-docling']
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: gcloud
-    args: [run, deploy, '${_SERVICE_NAME}', '--image=${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/city-docling:${BUILD_ID}', '--project=$PROJECT_ID', '--region=${_LOCATION}', '--no-allow-unauthenticated', '--cpu=2', '--memory=4Gi', '--concurrency=1', '--min-instances=0', '--max-instances=2', '--timeout=1800', '--set-env-vars=DOCLING_SOURCE_BUCKET=${_SOURCE_BUCKET}']
+    args: [run, deploy, '${_SERVICE_NAME}', '--image=${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/city-docling:${BUILD_ID}', '--project=$PROJECT_ID', '--region=${_LOCATION}', '--no-allow-unauthenticated', '--cpu=2', '--memory=4Gi', '--concurrency=1', '--min-instances=0', '--max-instances=2', '--timeout=1800', '--set-env-vars=DOCLING_SOURCE_BUCKET=${_SOURCE_BUCKET},DOCLING_ARTIFACT_BUCKET=${_ARTIFACT_BUCKET}']
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: bash
     args:
@@ -29,6 +29,7 @@ substitutions:
   _WEB_SERVICE: city-rag-backend-dev
   _CACHE_TAG: latest
   _SOURCE_BUCKET: tdf-ocf-city-governance-docs
+  _ARTIFACT_BUCKET: tdf-ocf-city-governance-artifacts
 options:
   logging: CLOUD_LOGGING_ONLY
 timeout: 3600s

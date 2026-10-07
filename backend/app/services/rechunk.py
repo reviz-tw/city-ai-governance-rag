@@ -50,8 +50,10 @@ def generate(document_id,checkpoint=None):
     data=store.get_bytes(doc.original_key)
     if hashlib.sha256(data).hexdigest()!=doc.original_hash:raise HTTPException(409,'Original file changed')
     filename=Path(doc.original_key).name
-    parsed=docling_pipeline.parse(data,filename,source_uri=doc.original_key) if (
-        settings.DOCLING_SERVICE_URL and len(data)>20*1024*1024 and doc.original_key.startswith('gs://')) else docling_pipeline.parse(data,filename)
+    if settings.DOCLING_SERVICE_URL and len(data)>20*1024*1024:
+        uri=doc.original_key if doc.original_key.startswith('gs://') else f'gs://{settings.ARTIFACT_GCS_BUCKET}/{doc.original_key}'
+        parsed=docling_pipeline.parse(data,filename,source_uri=uri)
+    else:parsed=docling_pipeline.parse(data,filename)
     if checkpoint: checkpoint()
     details={k:parsed[k] for k in ('parser_version','tokenizer','max_tokens','schema_version','warnings','source_reference_precision')}
     with store.session() as db:

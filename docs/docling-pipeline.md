@@ -20,10 +20,10 @@ Docling 2.134.0／docling-core 2.100.0 在獨立 worker 執行；網站不安裝
 
 套用會保存原草稿快照、附加新的不可變來源 blocks（舊 block IDs 保留）、再保存新草稿 revision。原始檔案、hash、review、發布版本與搜尋索引均不變。重新執行相同版本與參數時，已套用且未變更的 Docling 草稿會跳過。
 
-管理介面可背景產生候選稿、查看原文、預覽與套用。儲存後仍須檢查差異，再明確送出索引；本次重跑不自動發布或標記已 review。舊 DOC 由 Docling 透過隔離的 LibreOffice 轉換後解析，原檔與 hash 不變；純文字依原有段落建立 Docling 文件元素再切片。新文件上傳仍限制 20 MiB；既有原始文件可處理至 256 MiB，大型雲端原檔由 private worker 直接讀取指定來源 bucket 的 documents/ 路徑，避免 Cloud Run HTTP request 大小限制。其他不支援格式或解析錯誤會記錄失敗，不能假裝成功。
+管理介面可背景產生候選稿、查看原文、預覽與套用。儲存後仍須檢查差異，再明確送出索引；本次重跑不自動發布或標記已 review。舊 DOC 由 Docling 透過隔離的 LibreOffice 轉換後解析，原檔與 hash 不變；純文字依原有段落建立 Docling 文件元素再切片。新文件上傳仍限制 20 MiB；既有原始文件可處理至 256 MiB，大型雲端原檔由 private worker 直接讀取指定來源 bucket 的 documents/ 或既有 artifacts bucket 的 managed-originals/ 路徑，避免 Cloud Run HTTP request 大小限制。其他不支援格式或解析錯誤會記錄失敗，不能假裝成功。
 
 ## 部署後背景重跑
 
-`--cloud --enqueue` 將尚未完成的文件交给部署後的 Cloud Tasks／Docling pipeline；已更新文件會跳過，可重用的候選稿會直接套用或保留人工草稿。批次任務由管理員建立，解析完成後僅對未 review 且未人工修改的草稿自動套用，保護規則與本機重跑相同。
+`--cloud --enqueue` 將尚未完成的文件交給部署後的 Cloud Tasks／Docling pipeline；已更新文件會跳過，可重用的候選稿會直接套用或保留人工草稿。批次任務由管理員建立，解析完成後僅對未 review 且未人工修改的草稿自動套用，保護規則與本機重跑相同。
 
 `DOCLING_TASKS_QUEUE` 可指定獨立的文件處理 queue，建議 maxConcurrentDispatches=2，配合處理器最多兩個 instance；不佔滿原有投影片與 PDF 輸出 queue。任務及結果保存在既有 jobs 表，可從管理介面的「我的產出」查看。排程報告保存 document ID／job ID，供後續核對完成數與失敗原因。

@@ -14,10 +14,13 @@ class StoredSource(BaseModel):
     max_tokens:int=Field(default=768,ge=128,le=2048)
 
 def read_source(uri):
-    bucket=os.environ.get('DOCLING_SOURCE_BUCKET','')
-    prefix=f'gs://{bucket}/documents/'
-    if not bucket or not uri.startswith(prefix):
+    allowed=[(bucket,prefix) for bucket,prefix in (
+        (os.environ.get('DOCLING_SOURCE_BUCKET',''),'documents/'),
+        (os.environ.get('DOCLING_ARTIFACT_BUCKET',''),'managed-originals/')) if bucket]
+    match=next(((bucket,prefix) for bucket,prefix in allowed if uri.startswith(f'gs://{bucket}/{prefix}')),None)
+    if not match:
         raise HTTPException(422,'Untrusted source storage path')
+    bucket,_=match
     from google.auth import default
     from google.auth.transport.requests import AuthorizedSession
     from urllib.parse import quote

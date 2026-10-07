@@ -59,7 +59,9 @@ def parse(data,filename,*,source_uri=None):
         if not url.startswith('https://'):raise HTTPException(503,'Docling service must use HTTPS')
         token=fetch_id_token(Request(),url)
         if source_uri and len(data)>20*1024*1024:
-            if not source_uri.startswith(f'gs://{settings.GCS_BUCKET_NAME}/documents/'):
+            allowed=[f'gs://{bucket}/{prefix}' for bucket,prefix in (
+                (settings.GCS_BUCKET_NAME,'documents/'),(settings.ARTIFACT_GCS_BUCKET,'managed-originals/')) if bucket]
+            if not any(source_uri.startswith(prefix) for prefix in allowed):
                 raise HTTPException(422,'Untrusted Docling source path')
             response=requests.post(url+'/parse-source',headers={'Authorization':'Bearer '+token},
                 json={'source_uri':source_uri,'max_tokens':settings.DOCLING_CHUNK_TOKENS},timeout=1200)
