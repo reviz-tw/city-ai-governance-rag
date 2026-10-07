@@ -87,7 +87,7 @@ if __name__=='__main__':
         if args.cloud:
             # Reuse existing verified identity/config loading without changing account or project.
             import importlib.util,os,subprocess,socket,time
-            source=Path(__file__).resolve().parents[2]/'data/imports/13c88uASCEmKJkBWnGNi8aJB9ETCZxlRm/cloud_access.py'
+            source=Path(__file__).resolve().with_name('cloud_access.py')
             spec=importlib.util.spec_from_file_location('cloud_access',source)
             module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
             credentials,instance=module.setup()
