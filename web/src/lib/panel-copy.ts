@@ -28,7 +28,6 @@ export const PANEL_COPY = {
   pptx:['投影片','Slides','スライド','Présentation','Presentación','Презентация'],
   translation:['段落翻譯','Passage translation','段落の翻訳','Traduction de passages','Traducción de pasajes','Перевод фрагментов'],
   index:['切片發布','Chunk publication','チャンクの公開','Publication des segments','Publicación de fragmentos','Публикация фрагментов'],
-  rechunk:['文件結構切片','Document structure chunking','文書構造による分割','Découpage structuré des documents','Segmentación estructural de documentos','Разбиение по структуре документа'],
   createPdf:['產出 PDF','Create PDF','PDF を作成','Créer un PDF','Crear PDF','Создать PDF'],
   createSlides:['產出投影片','Create slides','スライドを作成','Créer une présentation','Crear presentación','Создать слайды'],
   slideDeckPlan:['共 {count} 頁，引用附於各頁，詳細說明保留在講者備註。','{count} slides, with citations on each slide and detail in speaker notes.','全 {count} 枚。各スライドに出典、発表者ノートに詳細を記載します。','{count} diapositives, avec sources sur chaque page et détails dans les notes.','{count} diapositivas, con fuentes en cada página y detalles en las notas.','{count} слайдов: ссылки на каждом, подробности в заметках.'],
