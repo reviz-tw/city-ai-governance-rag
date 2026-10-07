@@ -23,9 +23,11 @@
 - `azoezoe@reviz.tw`
 - `azoezoe@gmail.com`
 
-Google 的基本身分登入（openid/email/profile）適用測試名單例外，因此不需逐一加入 Google 名單；詳見 https://support.google.com/cloud/answer/15549945?hl=en 。所有 cookie 與 MCP bearer 登入均套用後端名單。`ADMIN_EMAILS`、`EDITOR_EMAILS` 決定文件編輯與發布角色，登入本身不授予編輯權限。`hcchien@reviz.tw`、`azoezoe@reviz.tw`、`azoezoe@gmail.com` 設為管理員，可編輯文件切片、儲存草稿與送出索引；`hcchien@gmail.com` 為閱讀者。
+本站登入資格與權限改由「工具 → 帳號管理」維護，儲存於資料庫 `workspace_accounts`。管理員可新增 Google 電子郵件帳號、切換讀者／編輯者／管理員、停用、重新啟用及刪除登入資格。每次 cookie、Google bearer 或 MCP 請求都重新檢查目前啟用狀態與角色。刪除帳號保留既有文件，但不再允許登入；保護最後一位有效管理員及管理員自己的權限。
 
-初次登入只使用基本身分與電子郵件，不要求 Drive 權限。原始文件及使用者明確選定的有限對話內容會傳送至專案設定的 Gemini global endpoint；對話不永久存入 session。
+首次初始化將 `LOGIN_ALLOWED_EMAILS`、`ADMIN_EMAILS`、`EDITOR_EMAILS` 匯入一次，以管理員優先、編輯者其次決定角色。完成後環境變數不再決定登入或權限，重啟也不重新加入已刪除的帳號。空白資料庫須先設定至少一位 `ADMIN_EMAILS` 再初始化；未知帳號一律拒絕。Google OAuth 仍負責驗證身分；Google Console 的目標對象與額外 Drive 授權限制是另外一層設定，本站帳號管理不修改 Google Console。
+
+初次登入只使用基本身分與電子郵件，不要求 Drive 權限。原始文件及使用者明確選定的有限對話內容會傳送至專案設定的 Gemini global endpoint；本站對話會依使用者身分永久儲存在資料庫，可於歷史對話中還原或刪除；摘要依據的原始訊息與每版摘要也會保留。
 
 ## 選用：另存 Google Slides
 

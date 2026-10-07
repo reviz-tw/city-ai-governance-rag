@@ -34,7 +34,7 @@ PYTHONPATH=backend .venv/bin/python backend/scripts/dev_server.py
 - `source_languages` 僅篩選原文，預設空陣列搜尋全部語言，不由回答語言隱含限制。
 - 翻譯使用獨立 `target_language`；不把譯本當成新原始證據或自動加入索引。
 
-前端傳入有限近期歷史與滾動摘要。MCP 只使用 host 明確提供的 `research_context`，不讀取桌面對話。更改城市會開始新的研究範圍；重新開始、登出、重新載入頁面會清除前端對話。對話不永久保存為伺服器 session；使用者選定的產出輸入則隨背景任務暫存至到期。
+本站研究對話與引用版本永久保存於個人 session，可從歷史對話還原、重新命名或刪除。後端使用已保存的滾動摘要與近期完整問答組合 context，每版摘要保留原始輪次供追溯；重新開始建立新對話，登出或重新載入不刪除歷史。MCP 只使用 host 明確提供的 `research_context`，不讀取桌面對話。使用者選定的產出輸入隨背景任務暫存至到期。詳見 [對話保存與摘要](docs/conversations.md)。
 
 模型輸入採保守 UTF-8 byte 預算（不是精確 tokenizer 計量）；預設總輸入 16,000、歷史 3,000、證據 9,000，並預留模型輸出。搜尋結果重新取得、去重、限制長度。無來源時不補寫政策事實。
 
@@ -76,3 +76,5 @@ PYTHONPATH=backend .venv/bin/pytest -q backend/tests
 Python 相依以 `requirements.in` 為輸入，`requirements.txt` 鎖定全部直接／間接版本；使用 uv 0.8.22、Python 3.12 universal compile 更新。
 
 `infra/cloudbuild.verify.yaml` 僅建置驗證。`infra/cloudbuild.yaml` 建置、推送並部署到固定的 Cloud Run 服務；先以 `candidate` 標籤與 `--no-traffic` 保留既有流量，再由 `verify_deployment.py` 驗證健康狀態、驗證設定與 Admin，通過後將流量切換到新版本，並確認服務網址未改變。新模型為 Vertex `gemini-3.7-flash`／清理 `gemini-3.5-flash-lite`、`global`，沒有跨認證來源的隱性 fallback。持續計費資源、切換及回復方式見 [部署方案](docs/deployment-plan.md)。
+
+文件解析與結構切片使用獨立的 Docling worker；配置、未 review 文件重跑與人工草稿保護方式見 [Docling pipeline](docs/docling-pipeline.md)。

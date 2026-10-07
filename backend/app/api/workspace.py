@@ -88,7 +88,7 @@ def list_artifacts():
 @router.get('/artifacts/{job_id}')
 def artifact(job_id: str):
     job = jobs.get(job_id)
-    if job.kind != 'index':
+    if job.kind not in {'index','rechunk'}:
         sources, _ = jobs.inputs(ArtifactRequest.model_validate(job.payload), require_user())
         result = jobs.describe(job)
         result['stale'] = sources != job.payload['sources']
@@ -135,7 +135,7 @@ def download(job_id: str, name: str, inline: bool = False):
     job = jobs.get(job_id)
     if job.status != 'completed':
         raise HTTPException(409, 'File rendering is not complete')
-    if job.kind != 'index':
+    if job.kind not in {'index','rechunk'}:
         sources, _ = jobs.inputs(ArtifactRequest.model_validate(job.payload), require_user())
         if sources != job.payload['sources']:
             raise HTTPException(409, 'Source version changed; regenerate this artifact')
@@ -221,3 +221,30 @@ def mark_my_review(document_id: str, body: ReviewRequest):
 @router.delete('/library/{document_id}/my-review')
 def remove_my_review(document_id: str, body: ReviewRequest):
     return documents.mark_reviewed(document_id, body.version, reviewed=False)
+
+@router.get('/library/{document_id}/docling-drafts')
+def docling_drafts(document_id: str):
+    from app.services import rechunk
+    return rechunk.list_proposals(document_id)
+
+
+class DoclingApply(BaseModel):
+    proposal_id: str = Field(max_length=100)
+    revision: int
+
+
+@router.post('/library/{document_id}/docling-drafts/apply')
+def apply_docling_draft(document_id: str, body: DoclingApply):
+    from app.services import rechunk
+    rechunk.apply(document_id,body.proposal_id,body.revision)
+    return documents.describe(documents.get(document_id,edit=True),True)
+
+@router.get('/library/{document_id}/docling-drafts/{proposal_id}')
+def docling_draft_detail(document_id: str,proposal_id: str):
+    from app.services import rechunk
+    return rechunk.proposal_detail(document_id,proposal_id)
+
+@router.post('/library/{document_id}/docling-drafts')
+def generate_docling_draft(document_id: str,body: ChunkDraftRequest):
+    from app.services import rechunk
+    return rechunk.enqueue(document_id,body.revision)

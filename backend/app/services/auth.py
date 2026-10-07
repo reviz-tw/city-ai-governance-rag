@@ -17,11 +17,13 @@ class User:
 
     @property
     def admin(self):
-        return self.email.lower() in {s.lower() for s in settings.ADMIN_EMAILS}
+        from app.services.accounts import role_for
+        return role_for(self.email) == 'admin'
 
     @property
     def editor(self):
-        return self.admin or self.email.lower() in {s.lower() for s in settings.EDITOR_EMAILS}
+        from app.services.accounts import role_for
+        return role_for(self.email) in {'admin', 'editor'}
 
 current_user: ContextVar[User | None] = ContextVar('current_user', default=None)
 
@@ -41,7 +43,8 @@ def require_editor() -> User:
 
 
 def allowed_user(user: User) -> User:
-    if settings.LOGIN_ALLOWED_EMAILS and user.email.lower() not in {email.lower() for email in settings.LOGIN_ALLOWED_EMAILS}:
+    from app.services.accounts import role_for
+    if role_for(user.email) is None:
         raise HTTPException(403, 'This account is not enabled for this workspace')
     return user
 

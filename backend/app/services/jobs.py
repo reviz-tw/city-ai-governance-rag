@@ -142,7 +142,13 @@ def mutate(job_id, action, revision, draft=None):
             if job.status not in {'failed', 'cancelled'} or job.payload.get('retry_count',0) >= 3:
                 raise HTTPException(409, 'This task cannot be retried')
             # Revalidate permissions and source versions before any new model call.
-            if job.kind != 'index':
+            if job.kind == 'rechunk':
+                from app.services import rechunk
+                document=documents.get(job.payload['document_id'],user,edit=True)
+                if (document.draft_revision!=job.payload['revision'] or document.original_hash!=job.payload['original_hash']
+                    or rechunk.reviewed(db,document)):
+                    raise HTTPException(409,'Source, draft or review changed; create a new task')
+            elif job.kind != 'index':
                 sources, _ = inputs(ArtifactRequest.model_validate(job.payload), user)
                 if sources != job.payload['sources']:
                     raise HTTPException(409, 'Original sources changed; create a new task')
@@ -380,14 +386,32 @@ def run(job_id):
         phase = job.status
         claimed = db.execute(update(store.Job).where(store.Job.id==job.id, store.Job.status==phase,
             store.Job.attempt==job.attempt).values(status='running', attempt=store.Job.attempt+1,
-                                                 lease_until=time.time()+300, updated_at=time.time()))
+                                                 lease_until=time.time()+(1500 if job.kind=='rechunk' else 300), updated_at=time.time()))
         if claimed.rowcount != 1:
             db.rollback()
             return
         db.commit()
         db.refresh(job)
     try:
-        if job.kind == 'index':
+        if job.kind == 'rechunk':
+            from app.services import rechunk
+            from app.services.auth import current_user, allowed_user
+            token=current_user.set(allowed_user(User(job.owner,job.email)))
+            try:
+                source=documents.get(job.payload['document_id'],edit=True)
+                if source.draft_revision!=job.payload['revision'] or source.original_hash!=job.payload['original_hash']:
+                    raise ValueError('Draft changed; request Docling again')
+                result=rechunk.generate(source.id,checkpoint=lambda:checkpoint(job.id,job.attempt))
+                if job.payload.get('apply_unreviewed') and result['status']!='already-updated':
+                    from app.services.accounts import require_admin
+                    require_admin()
+                    checkpoint(job.id,job.attempt)
+                    applied=rechunk.apply(source.id,result['id'],source.draft_revision,preserve_manual=True)
+                    result={**result,**applied}
+                draft,status=None,'completed'
+            finally:
+                current_user.reset(token)
+        elif job.kind == 'index':
             from app.services.chunks import run_publication
             result = run_publication(job)
             if result is None:

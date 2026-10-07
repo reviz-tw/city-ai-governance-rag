@@ -27,6 +27,6 @@ export function Login({onLogin}: {onLogin: (user: any) => void}) {
     <p className="login-description">用你自己的話提問，回答會附上原始文件。<br/>登入後可閱讀原文、產出報告與投影片。</p>
     <div className="google-signin" ref={root}/>
     {error && <p role="alert">{error}</p>}
-    <p className="login-note">登入只取得基本身分。另存 Google Slides 時才會另行詢問雲端檔案授權。</p>
+    <p className="login-note">登入只取得基本身分。研究對話與摘要會保存至你的帳號，可從歷史對話還原或刪除。另存 Google Slides 時才會另行詢問雲端檔案授權。</p>
   </div></main>;
 }

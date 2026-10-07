@@ -90,6 +90,8 @@ def session():
 
 def initialize():
     Base.metadata.create_all(engine())
+    from app.services.accounts import bootstrap
+    bootstrap()
     Path(settings.ARTIFACT_STORAGE_DIR).mkdir(parents=True, exist_ok=True)
 
 
@@ -163,5 +165,61 @@ class DraftRevision(Base):
     document_id: Mapped[str] = mapped_column(String(100), index=True)
     revision: Mapped[int] = mapped_column(Integer)
     chunks: Mapped[list] = mapped_column(JSON)
+    operator: Mapped[str] = mapped_column(String(320))
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+
+class WorkspaceAccount(Base):
+    __tablename__ = 'workspace_accounts'
+    email: Mapped[str] = mapped_column(String(320), primary_key=True)
+    role: Mapped[str] = mapped_column(String(20))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+class AccountInitialization(Base):
+    __tablename__ = 'account_initialization'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+class ChatSession(Base):
+    __tablename__ = 'chat_sessions'
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    owner: Mapped[str] = mapped_column(String(200), index=True)
+    title: Mapped[str] = mapped_column(String(160), default='新對話')
+    city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time)
+    busy_until: Mapped[float] = mapped_column(Float, default=0)
+
+class ChatTurn(Base):
+    __tablename__ = 'chat_turns'
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    session_id: Mapped[str] = mapped_column(String(100), index=True)
+    sequence: Mapped[int] = mapped_column(Integer)
+    question: Mapped[str] = mapped_column(Text)
+    answer: Mapped[str] = mapped_column(Text, default='')
+    sources: Mapped[list] = mapped_column(JSON, default=list)
+    response_language: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default='running')
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+class ChatSummary(Base):
+    __tablename__ = 'chat_summaries'
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    session_id: Mapped[str] = mapped_column(String(100), index=True)
+    through_sequence: Mapped[int] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text)
+    source_turn_ids: Mapped[list] = mapped_column(JSON)
+    method: Mapped[str] = mapped_column(String(40), default='extractive-v1')
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+class DoclingProposal(Base):
+    __tablename__ = 'docling_proposals'
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    document_id: Mapped[str] = mapped_column(String(100), index=True)
+    original_hash: Mapped[str] = mapped_column(String(64))
+    base_revision: Mapped[int] = mapped_column(Integer)
+    blocks: Mapped[list] = mapped_column(JSON)
+    chunks: Mapped[list] = mapped_column(JSON)
+    details: Mapped[dict] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(30), default='ready')
     operator: Mapped[str] = mapped_column(String(320))
     created_at: Mapped[float] = mapped_column(Float, default=time.time)

@@ -5,6 +5,7 @@
 !infra/
 infra/*
 !infra/cloudbuild.yaml
+!infra/cloudbuild.docling.yaml
 !infra/env.dev.yaml
 !infra/verify_deployment.py
 !backend/
@@ -12,6 +13,8 @@ backend/*
 !backend/requirements.txt
 !backend/app/
 !backend/app/**
+!backend/docling_worker/
+!backend/docling_worker/**
 !backend/tests/
 !backend/tests/**
 !web/

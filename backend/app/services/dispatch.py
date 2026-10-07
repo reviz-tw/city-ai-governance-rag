@@ -10,7 +10,8 @@ def enqueue(job):
     from google.auth import default
     from google.auth.transport.requests import AuthorizedSession
     credentials, _ = default(scopes=['https://www.googleapis.com/auth/cloud-platform'], quota_project_id=settings.GCP_PROJECT_ID)
-    parent = f'projects/{settings.GCP_PROJECT_ID}/locations/{settings.GCP_REGION}/queues/{settings.CLOUD_TASKS_QUEUE}'
+    queue=settings.DOCLING_TASKS_QUEUE if job.kind=='rechunk' and settings.DOCLING_TASKS_QUEUE else settings.CLOUD_TASKS_QUEUE
+    parent = f'projects/{settings.GCP_PROJECT_ID}/locations/{settings.GCP_REGION}/queues/{queue}'
     task = {'httpRequest':{'httpMethod':'POST','url':f'{settings.APP_ORIGIN}/internal/jobs/{job.id}',
                           'headers':{'Content-Type':'application/json'}, 'body':base64.b64encode(b'{}').decode(),
                           'oidcToken':{'serviceAccountEmail':settings.WORKER_SERVICE_ACCOUNT,'audience':settings.APP_ORIGIN}},

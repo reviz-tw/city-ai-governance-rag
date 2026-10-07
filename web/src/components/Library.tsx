@@ -1,3 +1,4 @@
+import {DoclingDrafts} from './DoclingDrafts';
 import {WorkspacePanel} from './WorkspacePanel';
 import {ReactNode, useEffect, useRef, useState} from 'react';
 import {api, apiList, ApiError, jsonRequest} from '../lib/api';
@@ -136,6 +137,7 @@ export function Library({editor, admin=false, standalone=false, onClose, onSessi
       <ChunkDraftEditor key={doc.id} chunks={doc.draft} blocks={doc.blocks||[]} onChange={mutateChunks}/>
       {doc.draft.length>MAX_PUBLICATION_CHUNKS&&<p role="status">{t('draftOverIndexLimit',{count:doc.draft.length,limit:MAX_PUBLICATION_CHUNKS.toLocaleString(lang)})}</p>}
       <div className="library-toolbar"><label>{t('chunkSize')}<input type="number" min="100" max="5000" value={chunkSize} onChange={e=>setChunkSize(Number(e.target.value))}/></label><button className="btn" disabled={!Number.isInteger(chunkSize)||chunkSize<100||chunkSize>5000} onClick={()=>setConfirmation('reset')}>{t('rechunk')}</button></div>
+      <DoclingDrafts document={doc} disabled={dirty||busy||pending} onApplied={value=>{loadDoc(value);void refresh();}} onJob={setJob}/>
       <button className="btn" onClick={()=>save()}>{t('saveDraft')}</button>
       {dirty&&<p role="status">{t('unsaved')}</p>}
       <button className="btn" disabled={dirty} onClick={()=>run(async()=>{const d=await api(`/api/library/${doc.id}/diff?language=${lang}`);setDiff(d.diff||t('noChanges'));setDiffHash(d.hash);})}>{t('viewDiff')}</button>

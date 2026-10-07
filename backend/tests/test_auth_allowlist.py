@@ -8,7 +8,10 @@ from app.services import auth
 
 
 def test_google_and_existing_sessions_honor_current_allowlist(monkeypatch):
-    monkeypatch.setattr(settings, 'LOGIN_ALLOWED_EMAILS', ['allowed@example.test'])
+    from app.services import store
+    with store.session() as db:
+        db.add(store.WorkspaceAccount(email='allowed@example.test', role='reader'))
+        db.commit()
     monkeypatch.setattr(auth.id_token, 'verify_oauth2_token', lambda *args: {
         'sub': 'google-sub', 'email': 'other@example.test', 'email_verified': True})
     with pytest.raises(HTTPException) as error:
@@ -50,11 +53,15 @@ def test_personal_mcp_credential_scope_rotation_revocation(monkeypatch):
         assert saved.digest != created['token']
     with pytest.raises(HTTPException):
         auth.authenticate(request('/api/library'))
-    monkeypatch.setattr(settings,'LOGIN_ALLOWED_EMAILS',['other@example.test'])
+    with store.session() as db:
+        db.get(store.WorkspaceAccount, 'editor@example.test').active = False
+        db.commit()
     with pytest.raises(HTTPException) as blocked:
         auth.authenticate(request())
     assert blocked.value.status_code == 403
-    monkeypatch.setattr(settings,'LOGIN_ALLOWED_EMAILS',[])
+    with store.session() as db:
+        db.get(store.WorkspaceAccount, 'editor@example.test').active = True
+        db.commit()
     auth.create_mcp_token(Response())
     with pytest.raises(HTTPException):
         auth.authenticate(request())

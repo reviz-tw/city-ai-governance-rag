@@ -349,3 +349,24 @@
   .chunk-editor textarea { min-height: 50dvh; padding: 14px; font-size: 16px; }
   .chunk-navigation-actions { width: 100%; }
 }
+
+.account-management {position:fixed;inset:80px 16px 16px;z-index:40;background:var(--color-bg);color:var(--color-text);padding:24px;overflow:auto;border:1px solid #aab7b3;border-radius:16px;box-shadow:0 12px 40px #0003;}
+.account-heading,.account-create,.account-row {display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+.account-heading {justify-content:space-between;}
+.account-create {margin:24px 0;}
+.account-management label {display:flex;flex-direction:column;gap:6px;}
+.account-row {padding:16px 0;border-top:1px solid #aab7b3;}
+.account-row strong {flex:1;overflow-wrap:anywhere;min-width:180px;}
+
+.conversation-history {display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 24px;border-bottom:1px solid var(--color-divider);position:relative;}
+.conversation-history label {display:flex;align-items:center;gap:8px;min-width:0;}
+.conversation-history select {max-width:360px;}
+.conversation-summaries {width:100%;max-height:300px;overflow:auto;}
+.conversation-summaries pre {white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;}
+@media(max-width:600px){.conversation-history{padding:8px;}.conversation-history label{width:100%;}.conversation-history select{flex:1;width:0;}}
+
+.conversation-history label {white-space:nowrap;}
+.conversation-summaries details {margin:8px 0;}
+.conversation-summaries details details {padding:8px 12px;border-left:2px solid var(--color-divider);}
+
+.docling-drafts {padding:16px;border:1px solid var(--color-divider);border-radius:12px;margin:16px 0;}

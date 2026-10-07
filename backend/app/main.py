@@ -75,6 +75,10 @@ app.add_middleware(
 # 掛載 REST API
 app.include_router(api_router)
 app.include_router(auth_router)
+from app.services.accounts import router as accounts_router
+app.include_router(accounts_router)
+from app.services.conversations import router as conversations_router
+app.include_router(conversations_router)
 app.include_router(workspace_router)
 
 class UnifiedMCPApp:

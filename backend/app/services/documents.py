@@ -190,7 +190,11 @@ def create(data: bytes, filename: str, mime: str, metadata: dict, cleaned_text: 
     user = require_editor()
     if len(data) > 20 * 1024 * 1024:
         raise HTTPException(413, 'Upload limit: 20 MiB')
-    blocks, warnings = extract(data, filename)
+    from app.services import docling_pipeline
+    parsed = docling_pipeline.parse(data, filename) if docling_pipeline.enabled() else None
+    blocks, warnings = (parsed['blocks'], parsed['warnings']) if parsed else extract(data, filename)
+    if parsed:
+        metadata = {**metadata, 'docling': {k:parsed[k] for k in ('parser_version','tokenizer','max_tokens','schema_version')}}
     try:
         language = normalize_language(metadata.get('language') or detect('\n'.join(b['text'] for b in blocks)[:4000]) or 'zh-TW')
     except ValueError:
@@ -198,7 +202,7 @@ def create(data: bytes, filename: str, mime: str, metadata: dict, cleaned_text: 
     document_id = uuid.uuid4().hex
     key = f'managed-originals/{document_id}/{hashlib.sha256(data).hexdigest()}/{Path(filename).name}'
     store.put_bytes(key, data, mime)
-    draft = baseline(blocks, reflow_pdf=Path(filename).suffix.lower() == '.pdf')
+    draft = parsed['chunks'] if parsed else baseline(blocks, reflow_pdf=Path(filename).suffix.lower() == '.pdf')
     if cleaned_text is not None and cleaned_text.strip():
         # Human cleaned text is a draft; the extraction remains the immutable source.
         draft = baseline([dict(id='cleaned',text=cleaned_text,page=None)])
@@ -290,6 +294,8 @@ def describe(doc, include_content=False, activity=None):
         result["legacy_filename"] = doc.original_key.removeprefix(f"gs://{settings.GCS_BUCKET_NAME}/documents/")
     if editable:
         from app.core.config import settings
+        from app.services import docling_pipeline
+        result.update(docling_enabled=docling_pipeline.enabled())
         result.update(readers=doc.readers, indexing_enabled=settings.CHUNK_INDEX_ENABLED and bool(settings.CHUNK_DATA_STORE_ID))
     if include_content:
         result.update(blocks=doc.blocks)

@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     CHUNK_INDEX_ENABLED: bool = False
     CHUNK_DATA_STORE_ID: str = ""
     CHUNK_SEARCH_ENGINE_ID: str = ""
+    DOCLING_SERVICE_URL: str = ""
+    DOCLING_PYTHON: str = ""
+    DOCLING_CHUNK_TOKENS: int = Field(768, ge=128, le=2048)
+    DOCLING_TASKS_QUEUE: str = ''
     SOFFICE_BIN: str = "soffice"
     FONT_DIR: str = "/usr/share/fonts/truetype/governance"
 

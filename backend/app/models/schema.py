@@ -87,4 +87,5 @@ class RAGQueryResponse(BaseModel):
     model_used: str
 
 class ChatStreamRequest(RAGQueryRequest):
+    session_id: str | None = Field(None, max_length=100)
     topic_id: Optional[str] = Field(None, description="Deprecated; no implicit research scope")

@@ -285,21 +285,17 @@ async def api_get_topics():
 @router.post("/chat/stream")
 async def api_chat_stream(request: ChatStreamRequest):
     """執行即時 SSE 串流問答與文獻出處引用"""
-    try:
-        return StreamingResponse(
-            stream_city_governance_rag_vertex(
-                query=request.query,
-                city_filter=request.city,
-                response_language=request.response_language,
-                interface_language=request.interface_language,
-                source_languages=request.source_languages,
-                research_context=request.research_context
-            ),
-            media_type="text/event-stream"
-        )
-    except Exception as e:
-        logger.error(f"Chat stream error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    from app.services import conversations
+    context=request.research_context
+    turn_id=None
+    if request.session_id:
+        turn_id,context=conversations.begin(request.session_id,request.query)
+    upstream=stream_city_governance_rag_vertex(
+        query=request.query,city_filter=request.city,response_language=request.response_language,
+        interface_language=request.interface_language,source_languages=request.source_languages,
+        research_context=context)
+    return StreamingResponse(conversations.stream(request.session_id,turn_id,upstream)
+        if turn_id else upstream,media_type='text/event-stream')
 
 @router.get("/health")
 async def health_check():
