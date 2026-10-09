@@ -508,7 +508,7 @@ def run(job_id):
                 active=db.get(store.Job,job.id)
                 if not active or active.status!='running' or active.attempt!=job.attempt:return
                 retries=active.payload.get('docling_retry_count',0)
-                if retries<12:
+                if retries<144:
                     active.payload={**active.payload,'docling_retry_count':retries+1}
                     db.commit()
                     defer(job,delay=min(60*2**retries,600))

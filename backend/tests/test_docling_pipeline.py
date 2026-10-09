@@ -185,3 +185,27 @@ def test_busy_processor_defers_job_without_changing_source(source,parser,monkeyp
     monkeypatch.setattr(docling_pipeline,'parse',parser)
     jobs.run(job['id'])
     assert jobs.get(job['id']).status=='completed'
+
+
+def test_batch_capacity_retries_survive_old_twelve_attempt_limit(source,parser,monkeypatch):
+    job=rechunk.enqueue(source['id'],source['draft_revision'])
+    with store.session() as db:
+        active=db.get(store.Job,job['id'])
+        active.payload={**active.payload,'docling_retry_count':12};db.commit()
+    def busy(*args,**kwargs):raise docling_pipeline.DoclingBusy('Busy')
+    monkeypatch.setattr(docling_pipeline,'parse',busy)
+    jobs.run(job['id'])
+    with store.session() as db:
+        active=db.get(store.Job,job['id'])
+        assert active.status=='queued' and active.payload['docling_retry_count']==13
+        assert active.expires_at-active.created_at>6*86400
+
+
+def test_processor_transport_interruption_is_retryable(monkeypatch):
+    import requests
+    import google.oauth2.id_token
+    monkeypatch.setattr(settings,'DOCLING_SERVICE_URL','https://processor.example.test')
+    monkeypatch.setattr(google.oauth2.id_token,'fetch_id_token',lambda *a:'test-token')
+    def disconnected(*args,**kwargs):raise requests.exceptions.ChunkedEncodingError('interrupted')
+    monkeypatch.setattr(requests,'post',disconnected)
+    with pytest.raises(docling_pipeline.DoclingBusy):docling_pipeline.parse(b'file','report.pdf')

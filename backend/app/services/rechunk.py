@@ -126,7 +126,7 @@ def enqueue(document_id,revision,*,apply_unreviewed=False):
             store.Job.payload['document_id'].as_string()==doc.id))
         if pending and pending.payload.get('document_id')==doc.id:return describe(pending)
         job=store.Job(id=uuid.uuid4().hex,owner=user.id,email=user.email,kind='rechunk',
-            payload={'document_id':doc.id,'revision':revision,'original_hash':doc.original_hash,'apply_unreviewed':apply_unreviewed},expires_at=time.time()+86400)
+            payload={'document_id':doc.id,'revision':revision,'original_hash':doc.original_hash,'apply_unreviewed':apply_unreviewed},expires_at=time.time()+7*86400)
         db.add(job);db.commit()
         dispatch_job(job)
         return describe(job)
