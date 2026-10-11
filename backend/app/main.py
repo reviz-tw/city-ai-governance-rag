@@ -260,6 +260,8 @@ def execute_job(job_id: str, request: Request):
         if not job or job.expires_at<=time.time():
             return {'status':'expired'}
         if job.status=='running':
+            if job.kind=='rechunk' and not job.payload.get('retry_transient',False):
+                return {'status':'already-running'}
             if job.lease_until>time.time():
                 raise HTTPException(503,'Task already running; retry after lease expiry')
             job.status='render_queued' if job.draft and job.kind not in {'translation','index'} else 'queued'
