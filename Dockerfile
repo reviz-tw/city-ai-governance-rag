@@ -38,6 +38,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend application source code
 COPY backend/app/ ./app/
+COPY backend/docling_worker/ ./docling_worker/
 COPY backend/tests/ ./tests/
 
 # Copy compiled React frontend bundle to backend static web_dist
