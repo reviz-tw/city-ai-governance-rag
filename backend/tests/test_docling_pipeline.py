@@ -171,7 +171,7 @@ def test_large_managed_original_normalizes_its_existing_storage_key(source,parse
 
 def test_busy_processor_defers_job_without_changing_source(source,parser,monkeypatch):
     original=documents.get(source['id'])
-    job=rechunk.enqueue(source['id'],source['draft_revision'])
+    job=rechunk.enqueue(source['id'],source['draft_revision'],retry_transient=True)
     def busy(*args,**kwargs):raise docling_pipeline.DoclingBusy('Busy')
     monkeypatch.setattr(docling_pipeline,'parse',busy)
     jobs.run(job['id'])
@@ -188,7 +188,7 @@ def test_busy_processor_defers_job_without_changing_source(source,parser,monkeyp
 
 
 def test_batch_capacity_retries_survive_old_twelve_attempt_limit(source,parser,monkeypatch):
-    job=rechunk.enqueue(source['id'],source['draft_revision'])
+    job=rechunk.enqueue(source['id'],source['draft_revision'],retry_transient=True)
     with store.session() as db:
         active=db.get(store.Job,job['id'])
         active.payload={**active.payload,'docling_retry_count':12};db.commit()
@@ -221,3 +221,14 @@ def test_pdfium_does_not_reuse_legacy_pdf_candidate(source,parser):
     assert new['id']!=old['id'] and not new['reused']
     with store.session() as db:
         assert db.get(store.DoclingProposal,new['id']).details['pdf_backend']=='pypdfium2'
+
+
+def test_single_attempt_batch_records_capacity_failure_without_retry(source,parser,monkeypatch):
+    job=rechunk.enqueue(source['id'],source['draft_revision'])
+    def busy(*a,**k):raise docling_pipeline.DoclingBusy('Busy')
+    monkeypatch.setattr(docling_pipeline,'parse',busy)
+    jobs.run(job['id'])
+    saved=jobs.get(job['id'])
+    assert saved.status=='failed' and saved.attempt==1
+    assert saved.result['status']=='failed'
+    assert 'resume_at' not in saved.payload and not saved.payload['retry_transient']

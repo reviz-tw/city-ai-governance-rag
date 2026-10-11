@@ -4,7 +4,7 @@ import tempfile
 import os
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from .converter import convert
+from .execution import run_conversion
 from pydantic import BaseModel, Field
 app=FastAPI(docs_url=None,redoc_url=None)
 lock=asyncio.Lock()
@@ -41,9 +41,7 @@ async def parse_source(source:StoredSource):
         data=await asyncio.to_thread(read_source,source.source_uri)
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/('source'+Path(source.source_uri).suffix.lower());path.write_bytes(data)
-            try:return await asyncio.to_thread(convert,path,source.max_tokens)
-            except Exception as exc:
-                raise HTTPException(422,'Docling conversion failed; original document retained') from exc
+            return await run_conversion(path,source.max_tokens)
 
 @app.get('/health')
 def health():return {'status':'ok','processor':'docling'}
@@ -59,6 +57,4 @@ async def parse(file:UploadFile=File(...),max_tokens:int=Form(768)):
     async with lock:
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/('source'+suffix);path.write_bytes(data)
-            try:return await asyncio.to_thread(convert,path,max_tokens)
-            except Exception as exc:
-                raise HTTPException(422,'Docling conversion failed; original document retained') from exc
+            return await run_conversion(path,max_tokens)

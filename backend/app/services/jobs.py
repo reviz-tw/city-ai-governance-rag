@@ -386,7 +386,7 @@ def run(job_id):
         phase = job.status
         claimed = db.execute(update(store.Job).where(store.Job.id==job.id, store.Job.status==phase,
             store.Job.attempt==job.attempt).values(status='running', attempt=store.Job.attempt+1,
-                                                 lease_until=time.time()+(1500 if job.kind=='rechunk' else 300), updated_at=time.time()))
+                                                 lease_until=time.time()+(1750 if job.kind=='rechunk' else 300), updated_at=time.time()))
         if claimed.rowcount != 1:
             db.rollback()
             return
@@ -503,7 +503,7 @@ def run(job_id):
         return
     except Exception as exc:
         from app.services.docling_pipeline import DoclingBusy
-        if job.kind=='rechunk' and isinstance(exc,DoclingBusy):
+        if job.kind=='rechunk' and job.payload.get('retry_transient',False) and isinstance(exc,DoclingBusy):
             with store.session() as db:
                 active=db.get(store.Job,job.id)
                 if not active or active.status!='running' or active.attempt!=job.attempt:return
@@ -523,6 +523,10 @@ def run(job_id):
             active = db.get(store.Job, job.id)
             if active and active.status == 'running' and active.attempt == job.attempt:
                 active.status, active.error = 'failed', f'{type(exc).__name__}: task could not be completed; review input and retry.'
+                if job.kind=='rechunk':
+                    reason='parse_unavailable_or_timeout' if isinstance(exc,DoclingBusy) else type(exc).__name__
+                    active.error=reason+'; no automatic retry'
+                    active.result={'document_id':job.payload['document_id'],'status':'failed','reason':reason,'attempt':job.attempt}
                 if isinstance(exc, slide_authoring.SlideQualityError):
                     active.error = str(exc)
                 active.revision += 1

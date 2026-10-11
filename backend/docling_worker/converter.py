@@ -2,6 +2,8 @@
 import hashlib
 import json
 import os
+import time
+import logging
 from importlib.metadata import version
 from pathlib import Path
 from functools import lru_cache
@@ -22,12 +24,24 @@ def document_converter():
     return DocumentConverter(format_options={InputFormat.PDF:PdfFormatOption(pipeline_options=options,backend=PyPdfiumDocumentBackend)})
 
 
+def progress(stage,**fields):
+    print(json.dumps({"event":"docling_progress","request_id":os.environ.get("DOCLING_REQUEST_ID"),"stage":stage,**fields}),flush=True)
+
+
 def convert(path: Path, max_tokens=768):
     import tiktoken
     from docling.datamodel.base_models import ConversionStatus
     from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
     from docling_core.transforms.chunker.tokenizer.openai import OpenAITokenizer
+    started=time.monotonic()
     digest=hashlib.sha256(path.read_bytes()).hexdigest()
+    progress('source_loaded',source_hash=digest,bytes=path.stat().st_size,pdf_backend='pypdfium2' if path.suffix.lower()=='.pdf' else None)
+    if path.suffix.lower()=='.pdf':
+        import pypdfium2 as pdfium
+        pdf=pdfium.PdfDocument(path)
+        try:progress('pdf_loaded',pages=len(pdf))
+        finally:pdf.close()
+    progress('conversion_started')
     if path.suffix.lower()=='.txt':
         from docling_core.types.doc import DoclingDocument, DocItemLabel
         document=DoclingDocument(name=path.stem)
@@ -38,6 +52,8 @@ def convert(path: Path, max_tokens=768):
         if result.status != ConversionStatus.SUCCESS:
             raise ValueError('Docling did not completely convert the document')
         document=result.document
+    progress('conversion_completed',elapsed_seconds=round(time.monotonic()-started,2))
+    progress('chunking_started')
     tokenizer=OpenAITokenizer(tokenizer=tiktoken.get_encoding('cl100k_base'),max_tokens=max_tokens)
     chunker=HybridChunker(tokenizer=tokenizer,merge_peers=True,repeat_table_header=True)
     blocks=[]; by_ref={}
@@ -84,6 +100,7 @@ def convert(path: Path, max_tokens=768):
             algorithm='docling-hybrid-v1',headings=headings,token_count=tokenizer.count_tokens(text)))
     if not values or not blocks:raise ValueError('Docling returned no source text')
     if sum(len(b['text']) for b in blocks)>1000000:raise ValueError('Document exceeds extraction limit')
+    progress('chunking_completed',chunks=len(values),blocks=len(blocks),elapsed_seconds=round(time.monotonic()-started,2))
     return dict(blocks=blocks,chunks=values,warnings=[],original_hash=digest,
         parser_version=parser_version,pdf_backend='pypdfium2' if path.suffix.lower()=='.pdf' else None,tokenizer='cl100k_base',max_tokens=max_tokens,
         source_reference_precision='document-element',schema_version=1)
@@ -91,6 +108,7 @@ def convert(path: Path, max_tokens=768):
 
 if __name__=='__main__':
     import sys
+    logging.basicConfig(level=logging.INFO,format=os.environ.get('DOCLING_REQUEST_ID','local')+' %(name)s %(levelname)s %(message)s')
     if sys.argv[1]=='--serve':
         from contextlib import redirect_stdout
         for line in sys.stdin:
