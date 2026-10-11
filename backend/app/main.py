@@ -264,6 +264,10 @@ def execute_job(job_id: str, request: Request):
                 raise HTTPException(503,'Task already running; retry after lease expiry')
             job.status='render_queued' if job.draft and job.kind not in {'translation','index'} else 'queued'
             db.commit()
+    if job.kind == 'rechunk' and settings.DOCLING_RUN_JOB:
+        from app.services.rechunk_runner import launch
+        launch()
+        return {'status':'dispatched'}
     jobs.run(job_id)
     jobs.purge_expired()
     return {'status':'handled'}

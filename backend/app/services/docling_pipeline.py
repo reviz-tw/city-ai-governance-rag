@@ -70,10 +70,10 @@ def parse(data,filename,*,source_uri=None):
                 if not any(source_uri.startswith(prefix) for prefix in allowed):
                     raise HTTPException(422,'Untrusted Docling source path')
                 response=requests.post(url+'/parse-source',headers={'Authorization':'Bearer '+token},
-                    json={'source_uri':source_uri,'max_tokens':settings.DOCLING_CHUNK_TOKENS},timeout=(30,1650))
+                    json={'source_uri':source_uri,'max_tokens':settings.DOCLING_CHUNK_TOKENS},timeout=(30,3660))
             else:
                 response=requests.post(url+'/parse',headers={'Authorization':'Bearer '+token},
-                    files={'file':(Path(filename).name,data)},data={'max_tokens':settings.DOCLING_CHUNK_TOKENS},timeout=(30,1650))
+                    files={'file':(Path(filename).name,data)},data={'max_tokens':settings.DOCLING_CHUNK_TOKENS},timeout=(30,3660))
         except (requests.exceptions.ConnectionError,requests.exceptions.Timeout,requests.exceptions.ChunkedEncodingError) as exc:
             raise DoclingBusy("Document processor connection interrupted") from exc
         if response.status_code in {429,500,502,503,504}:raise DoclingBusy('Document processor temporarily unavailable')

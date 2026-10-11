@@ -11,7 +11,7 @@ from fastapi import HTTPException
 async def run_conversion(path, max_tokens, *, timeout=None):
     request_id=uuid.uuid4().hex
     started=time.monotonic()
-    timeout=timeout or int(os.environ.get('DOCLING_PARSE_TIMEOUT_SECONDS','1500'))
+    timeout=timeout or int(os.environ.get('DOCLING_PARSE_TIMEOUT_SECONDS','3600'))
     output=Path(path).with_suffix('.result.json')
     print(json.dumps({'event':'docling_request_started','request_id':request_id,'timeout_seconds':timeout}),flush=True)
     process=await asyncio.create_subprocess_exec(sys.executable,'-m','docling_worker.converter',str(path),str(output),str(max_tokens),env={**os.environ,'DOCLING_REQUEST_ID':request_id},start_new_session=True)

@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     DOCLING_PYTHON: str = ""
     DOCLING_CHUNK_TOKENS: int = Field(768, ge=128, le=2048)
     DOCLING_TASKS_QUEUE: str = ''
+    DOCLING_RUN_JOB: str = ''
     SOFFICE_BIN: str = "soffice"
     FONT_DIR: str = "/usr/share/fonts/truetype/governance"
 

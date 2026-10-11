@@ -386,7 +386,7 @@ def run(job_id):
         phase = job.status
         claimed = db.execute(update(store.Job).where(store.Job.id==job.id, store.Job.status==phase,
             store.Job.attempt==job.attempt).values(status='running', attempt=store.Job.attempt+1,
-                                                 lease_until=time.time()+(1750 if job.kind=='rechunk' else 300), updated_at=time.time()))
+                                                 lease_until=time.time()+(3900 if job.kind=='rechunk' else 300), updated_at=time.time()))
         if claimed.rowcount != 1:
             db.rollback()
             return

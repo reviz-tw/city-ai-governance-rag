@@ -26,6 +26,16 @@ steps:
       - '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}'
     id: 'push-image'
 
+  # Rechunk requests may run for an hour; Cloud Tasks only starts this sequential job.
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args: [run, jobs, deploy, city-docling-batch, '--image=${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:${_TAG}', '--region=${_LOCATION}', '--command=python', '--args=-m,app.services.rechunk_runner', '--tasks=1', '--parallelism=1', '--max-retries=0', '--task-timeout=86400s', '--cpu=1', '--memory=1Gi', '--service-account=59297909591-compute@developer.gserviceaccount.com', '--env-vars-file=infra/env.dev.yaml', '--set-secrets=AUTH_SESSION_SECRET=${_SESSION_SECRET}:latest,DATABASE_URL=${_DATABASE_SECRET}:latest', '--set-cloudsql-instances=${PROJECT_ID}:${_LOCATION}:${_SQL_INSTANCE}']
+    id: 'deploy-docling-batch'
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args: [run, jobs, add-iam-policy-binding, city-docling-batch, '--region=${_LOCATION}', '--member=serviceAccount:59297909591-compute@developer.gserviceaccount.com', '--role=roles/run.invoker']
+    id: 'authorize-docling-batch'
+
   # 3. Deploy to the existing service; the fixed candidate tag is only for smoke checks.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
