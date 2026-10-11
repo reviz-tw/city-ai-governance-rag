@@ -40,7 +40,9 @@ def run(report:Path,apply:bool,only:list[str],workers=1,enqueue=False):
                     ready=db.scalar(select(store.DoclingProposal).where(store.DoclingProposal.document_id==doc.id,
                         store.DoclingProposal.status=='ready',store.DoclingProposal.base_revision==doc.draft_revision,
                         store.DoclingProposal.original_hash==doc.original_hash))
-                    updated=applied and applied.original_hash==doc.original_hash and applied.chunks==doc.draft
+                    expected_backend='pypdfium2' if doc.mime=='application/pdf' or Path(doc.original_key).suffix.lower()=='.pdf' else None
+                    updated=applied and applied.original_hash==doc.original_hash and applied.chunks==doc.draft and applied.details.get('pdf_backend')==expected_backend
+                    if ready and ready.details.get('pdf_backend')!=expected_backend:ready=None
                 if updated:row['status']='already-updated'
                 elif ready:row.update(rechunk.apply(identifier,ready.id,row['revision'],preserve_manual=True))
                 else:

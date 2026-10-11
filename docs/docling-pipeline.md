@@ -31,3 +31,5 @@ Docling 2.134.0／docling-core 2.100.0 在獨立 worker 執行；網站不安裝
 處理器滿載（429）或暫時不可用（5xx）時，背景工作會保留原始檔與草稿，延後重試；退避由 60 秒逐步增加至 600 秒，最多 12 次，且每次仍核對帳號、來源 hash、草稿版本及 review 狀態。解析錯誤不會標記成功。
 
 批次重跑建議 maxConcurrentDispatches=1，以免大量 PDF 同時耗盡處理器容量。容量不足與連線中斷會延後重試（最多 144 次，最長間隔 10 分鐘）；rechunk 工作紀錄保留 7 天。線上 runtime service account 必須在指定 Docling queue 具有 roles/cloudtasks.enqueuer，才能建立延後任務。
+
+PDF backend 明確指定 PyPdfiumDocumentBackend（pypdfium2），解析結果與候選稿記錄 pdf_backend；PDFium 重新解析不重用舊 backend 的候選稿。OCR、表格辨識與 HybridChunker 設定保持一致。

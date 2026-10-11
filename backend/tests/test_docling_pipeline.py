@@ -13,7 +13,7 @@ def parser(monkeypatch):
         return dict(blocks=[block],chunks=[dict(id='dlc1',order=0,content='AI 治理\n'+block['text'],
             refs=[dict(block_id=block['id'],start=0,end=len(block['text']),page=1)],algorithm='docling-hybrid-v1')],
             warnings=[],original_hash=hashlib.sha256(data).hexdigest(),parser_version='2.134.0',tokenizer='cl100k_base',
-            max_tokens=768,schema_version=1,source_reference_precision='document-element')
+            max_tokens=768,pdf_backend='pypdfium2' if filename.endswith('.pdf') else None,schema_version=1,source_reference_precision='document-element')
     monkeypatch.setattr(docling_pipeline,'parse',parse)
     return parse
 
@@ -209,3 +209,15 @@ def test_processor_transport_interruption_is_retryable(monkeypatch):
     def disconnected(*args,**kwargs):raise requests.exceptions.ChunkedEncodingError('interrupted')
     monkeypatch.setattr(requests,'post',disconnected)
     with pytest.raises(docling_pipeline.DoclingBusy):docling_pipeline.parse(b'file','report.pdf')
+
+
+def test_pdfium_does_not_reuse_legacy_pdf_candidate(source,parser):
+    source=documents.create(b'synthetic original','legacy.pdf','application/pdf',{'language':'zh-TW'})
+    old=rechunk.generate(source['id'])
+    with store.session() as db:
+        proposal=db.get(store.DoclingProposal,old['id'])
+        proposal.details={k:v for k,v in proposal.details.items() if k!='pdf_backend'};db.commit()
+    new=rechunk.generate(source['id'])
+    assert new['id']!=old['id'] and not new['reused']
+    with store.session() as db:
+        assert db.get(store.DoclingProposal,new['id']).details['pdf_backend']=='pypdfium2'

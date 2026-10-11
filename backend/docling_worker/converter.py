@@ -10,6 +10,7 @@ from functools import lru_cache
 @lru_cache(maxsize=1)
 def document_converter():
     from docling.document_converter import DocumentConverter, PdfFormatOption
+    from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
     from docling.datamodel.base_models import InputFormat
     from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
     options=PdfPipelineOptions()
@@ -18,7 +19,7 @@ def document_converter():
     options.ocr_options=RapidOcrOptions()
     if os.environ.get('DOCLING_ARTIFACTS_PATH'):
         options.artifacts_path=Path(os.environ['DOCLING_ARTIFACTS_PATH'])
-    return DocumentConverter(format_options={InputFormat.PDF:PdfFormatOption(pipeline_options=options)})
+    return DocumentConverter(format_options={InputFormat.PDF:PdfFormatOption(pipeline_options=options,backend=PyPdfiumDocumentBackend)})
 
 
 def convert(path: Path, max_tokens=768):
@@ -41,6 +42,7 @@ def convert(path: Path, max_tokens=768):
     chunker=HybridChunker(tokenizer=tokenizer,merge_peers=True,repeat_table_header=True)
     blocks=[]; by_ref={}
     parser_version=version('docling')
+    parser_identity=parser_version+(':pypdfium2' if path.suffix.lower()=='.pdf' else '')
     for item,_ in document.iterate_items():
         label=str(item.label.value)
         if label in {'page_header','page_footer','picture'}: continue
@@ -53,7 +55,7 @@ def convert(path: Path, max_tokens=768):
         kind='table' if label=='table' else 'heading' if label in {'section_header','title'} else 'code' if label=='code' else 'paragraph'
         refs=[]
         for page in pages:
-            identifier='dl-'+hashlib.sha256(f'{digest}:{parser_version}:{item.self_ref}:{page}:{text}'.encode()).hexdigest()[:32]
+            identifier='dl-'+hashlib.sha256(f'{digest}:{parser_identity}:{item.self_ref}:{page}:{text}'.encode()).hexdigest()[:32]
             block=dict(id=identifier,text=text,page=page,kind=kind,cells=None,
                 docling_ref=item.self_ref,provenance=provenance,extraction='docling-'+parser_version)
             if kind=='table':block['table_data']=item.data.model_dump(mode='json')
@@ -83,7 +85,7 @@ def convert(path: Path, max_tokens=768):
     if not values or not blocks:raise ValueError('Docling returned no source text')
     if sum(len(b['text']) for b in blocks)>1000000:raise ValueError('Document exceeds extraction limit')
     return dict(blocks=blocks,chunks=values,warnings=[],original_hash=digest,
-        parser_version=parser_version,tokenizer='cl100k_base',max_tokens=max_tokens,
+        parser_version=parser_version,pdf_backend='pypdfium2' if path.suffix.lower()=='.pdf' else None,tokenizer='cl100k_base',max_tokens=max_tokens,
         source_reference_precision='document-element',schema_version=1)
 
 

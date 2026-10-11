@@ -35,18 +35,20 @@ def list_proposals(document_id):
 def generate(document_id,checkpoint=None):
     user=require_editor()
     doc=documents.get(document_id,edit=True)
+    expected_backend='pypdfium2' if doc.mime=='application/pdf' or Path(doc.original_key).suffix.lower()=='.pdf' else None
     with store.session() as db:
         if reviewed(db,doc):raise HTTPException(409,'Human-reviewed documents are protected')
         if doc.index_status=='pending':raise HTTPException(409,'Index publication is pending')
         current_proposal=db.scalar(select(store.DoclingProposal).where(store.DoclingProposal.document_id==doc.id,store.DoclingProposal.status=='applied').order_by(store.DoclingProposal.created_at.desc()))
         if (current_proposal and current_proposal.original_hash==doc.original_hash and current_proposal.chunks==doc.draft
             and current_proposal.details.get('max_tokens')==settings.DOCLING_CHUNK_TOKENS
-            and current_proposal.details.get('parser_version')=='2.134.0'):
+            and current_proposal.details.get('parser_version')=='2.134.0'
+            and current_proposal.details.get('pdf_backend')==expected_backend):
             return {'id':current_proposal.id,'status':'already-updated','chunks':len(doc.draft),'reused':True}
         existing=db.scalar(select(store.DoclingProposal).where(store.DoclingProposal.document_id==doc.id,
             store.DoclingProposal.original_hash==doc.original_hash,store.DoclingProposal.base_revision==doc.draft_revision,
             store.DoclingProposal.status=='ready'))
-        if existing:return {'id':existing.id,'status':'ready','chunks':len(existing.chunks),'reused':True}
+        if existing and existing.details.get('pdf_backend')==expected_backend:return {'id':existing.id,'status':'ready','chunks':len(existing.chunks),'reused':True}
     data=store.get_bytes(doc.original_key)
     if hashlib.sha256(data).hexdigest()!=doc.original_hash:raise HTTPException(409,'Original file changed')
     filename=Path(doc.original_key).name
@@ -55,7 +57,7 @@ def generate(document_id,checkpoint=None):
         parsed=docling_pipeline.parse(data,filename,source_uri=uri)
     else:parsed=docling_pipeline.parse(data,filename)
     if checkpoint: checkpoint()
-    details={k:parsed[k] for k in ('parser_version','tokenizer','max_tokens','schema_version','warnings','source_reference_precision')}
+    details={'pdf_backend':parsed.get('pdf_backend'),**{k:parsed[k] for k in ('parser_version','tokenizer','max_tokens','schema_version','warnings','source_reference_precision')}}
     with store.session() as db:
         current=db.scalar(select(store.Document).where(store.Document.id==doc.id).with_for_update())
         if reviewed(db,current) or current.draft_revision!=doc.draft_revision or current.original_hash!=doc.original_hash:
