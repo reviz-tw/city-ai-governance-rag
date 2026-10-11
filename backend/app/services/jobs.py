@@ -248,7 +248,7 @@ def checkpoint(job_id, attempt, progress=None, draft=None):
         job = db.get(store.Job, job_id)
         if not job or job.status == 'cancelled' or job.attempt != attempt or job.expires_at <= time.time():
             raise InterruptedError('Task cancelled, replaced or expired')
-        job.lease_until, job.updated_at = time.time()+300, time.time()
+        job.lease_until, job.updated_at = time.time()+(3900 if job.kind=='rechunk' else 300), time.time()
         if progress is not None:
             job.progress = progress
         if draft is not None:

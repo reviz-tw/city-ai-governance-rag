@@ -232,3 +232,12 @@ def test_single_attempt_batch_records_capacity_failure_without_retry(source,pars
     assert saved.status=='failed' and saved.attempt==1
     assert saved.result['status']=='failed'
     assert 'resume_at' not in saved.payload and not saved.payload['retry_transient']
+
+
+def test_rechunk_checkpoint_keeps_hour_long_lease(source,parser,monkeypatch):
+    queued=rechunk.enqueue(source['id'],source['draft_revision'])
+    monkeypatch.setattr(jobs.time,'time',lambda:1000)
+    jobs.checkpoint(queued['id'],0)
+    with store.session() as db:
+        job=db.get(store.Job,queued['id'])
+        assert job.lease_until==4900
