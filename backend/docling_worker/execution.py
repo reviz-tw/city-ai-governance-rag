@@ -15,6 +15,7 @@ async def run_conversion(path, max_tokens, *, timeout=None):
     output=Path(path).with_suffix('.result.json')
     print(json.dumps({'event':'docling_request_started','request_id':request_id,'timeout_seconds':timeout}),flush=True)
     process=await asyncio.create_subprocess_exec(sys.executable,'-m','docling_worker.converter',str(path),str(output),str(max_tokens),env={**os.environ,'DOCLING_REQUEST_ID':request_id},start_new_session=True)
+    failure=None
     try:
         waiter=asyncio.create_task(process.wait())
         while not waiter.done():
@@ -30,10 +31,10 @@ async def run_conversion(path, max_tokens, *, timeout=None):
         print(json.dumps({'event':'docling_request_completed','request_id':request_id,'elapsed_seconds':round(time.monotonic()-started,2),'chunks':len(result['chunks'])}),flush=True)
         return result
     except asyncio.TimeoutError as exc:
-        print(json.dumps({'event':'docling_request_failed','request_id':request_id,'reason':'parse_timeout','elapsed_seconds':round(time.monotonic()-started,2)}),flush=True)
+        failure='parse_timeout'
         raise HTTPException(504,'Docling parsing timed out; parsing process stopped') from exc
     except BaseException as exc:
-        print(json.dumps({'event':'docling_request_failed','request_id':request_id,'reason':type(exc).__name__,'elapsed_seconds':round(time.monotonic()-started,2)}),flush=True)
+        failure='caller_disconnected' if isinstance(exc,asyncio.CancelledError) else type(exc).__name__
         raise
     finally:
         if process.returncode is None:
@@ -45,3 +46,9 @@ async def run_conversion(path, max_tokens, *, timeout=None):
                 try:os.killpg(process.pid,signal.SIGKILL)
                 except ProcessLookupError:pass
                 await process.wait()
+            # Kill surviving descendants even if the parent exited on SIGTERM.
+            try:os.killpg(process.pid,signal.SIGKILL)
+            except ProcessLookupError:pass
+        if failure:
+            print(json.dumps({'event':'docling_process_stopped','request_id':request_id,'returncode':process.returncode}),flush=True)
+            print(json.dumps({'event':'docling_request_failed','request_id':request_id,'reason':failure,'elapsed_seconds':round(time.monotonic()-started,2)}),flush=True)

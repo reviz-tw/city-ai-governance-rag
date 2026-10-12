@@ -7,6 +7,7 @@ import os
 import threading
 import selectors
 import atexit
+import time
 from pathlib import Path
 from fastapi import HTTPException
 from app.core.config import settings
@@ -63,22 +64,38 @@ def parse(data,filename,*,source_uri=None):
         url=settings.DOCLING_SERVICE_URL.rstrip('/')
         if not url.startswith('https://'):raise HTTPException(503,'Docling service must use HTTPS')
         token=fetch_id_token(Request(),url)
+        deadline=time.monotonic()+3660
         try:
             if source_uri and len(data)>20*1024*1024:
                 allowed=[f'gs://{bucket}/{prefix}' for bucket,prefix in (
                     (settings.GCS_BUCKET_NAME,'documents/'),(settings.ARTIFACT_GCS_BUCKET,'managed-originals/')) if bucket]
                 if not any(source_uri.startswith(prefix) for prefix in allowed):
                     raise HTTPException(422,'Untrusted Docling source path')
-                response=requests.post(url+'/parse-source',headers={'Authorization':'Bearer '+token},
-                    json={'source_uri':source_uri,'max_tokens':settings.DOCLING_CHUNK_TOKENS},timeout=(30,3660))
+                response=requests.post(url+'/parse-source',headers={'Authorization':'Bearer '+token,'Accept':'application/x-ndjson'},
+                    json={'source_uri':source_uri,'max_tokens':settings.DOCLING_CHUNK_TOKENS},timeout=(30,90),stream=True)
             else:
-                response=requests.post(url+'/parse',headers={'Authorization':'Bearer '+token},
-                    files={'file':(Path(filename).name,data)},data={'max_tokens':settings.DOCLING_CHUNK_TOKENS},timeout=(30,3660))
+                response=requests.post(url+'/parse',headers={'Authorization':'Bearer '+token,'Accept':'application/x-ndjson'},
+                    files={'file':(Path(filename).name,data)},data={'max_tokens':settings.DOCLING_CHUNK_TOKENS},timeout=(30,90),stream=True)
+            try:
+                if response.status_code in {429,500,502,503,504}:raise DoclingBusy('Document processor temporarily unavailable')
+                if response.status_code!=200:raise HTTPException(422,'Docling parsing failed; original retained')
+                if 'application/x-ndjson' in getattr(response,'headers',{}).get('Content-Type',''):
+                    result=None
+                    for line in response.iter_lines():
+                        if time.monotonic()>deadline:raise DoclingBusy('Document processor exceeded overall deadline')
+                        if not line:continue
+                        event=json.loads(line)
+                        if event.get('event')=='failed':
+                            raise HTTPException(event.get('status',422),event.get('detail','Docling parsing failed'))
+                        if event.get('event')=='completed':
+                            result=event['result']
+                            break
+                    if result is None:raise DoclingBusy('Document processor stream ended before completion')
+                else:result=response.json()
+            finally:
+                if hasattr(response,'close'):response.close()
         except (requests.exceptions.ConnectionError,requests.exceptions.Timeout,requests.exceptions.ChunkedEncodingError) as exc:
             raise DoclingBusy("Document processor connection interrupted") from exc
-        if response.status_code in {429,500,502,503,504}:raise DoclingBusy('Document processor temporarily unavailable')
-        if response.status_code!=200:raise HTTPException(422,'Docling parsing failed; original retained')
-        result=response.json()
     else:
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/('source'+Path(filename).suffix.lower())

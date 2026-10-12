@@ -241,3 +241,31 @@ def test_rechunk_checkpoint_keeps_hour_long_lease(source,parser,monkeypatch):
     with store.session() as db:
         job=db.get(store.Job,queued['id'])
         assert job.lease_until==4900
+
+
+@pytest.mark.parametrize('terminal',['completed','truncated','failed'])
+def test_remote_stream_requires_completion_and_closes_connection(monkeypatch,terminal):
+    import json,requests
+    from google.oauth2 import id_token
+    monkeypatch.setattr(settings,'DOCLING_SERVICE_URL','https://processor.example.test')
+    monkeypatch.setattr(id_token,'fetch_id_token',lambda *args:'test-token')
+    data=b'Policy';block=dict(id='b',text='Policy',page=1)
+    payload=dict(schema_version=1,original_hash=hashlib.sha256(data).hexdigest(),blocks=[block],chunks=[dict(id='c',order=0,content='Policy',refs=[dict(block_id='b',start=0,end=6,page=1)])])
+    class Response:
+        status_code=200
+        headers={'Content-Type':'application/x-ndjson'}
+        closed=False
+        def iter_lines(self):
+            yield b'{"event":"started"}'
+            yield b'{"event":"running","elapsed_seconds":1200}'
+            if terminal=='completed':yield json.dumps({'event':'completed','result':payload}).encode()
+            if terminal=='failed':yield b'{"event":"failed","status":504,"detail":"Parser stopped"}'
+        def close(self):self.closed=True
+    response=Response();calls=[]
+    def post(url,**kwargs):calls.append(kwargs);return response
+    monkeypatch.setattr(requests,'post',post)
+    if terminal=='completed':assert docling_pipeline.parse(data,'report.pdf')==payload
+    else:
+        with pytest.raises(HTTPException):docling_pipeline.parse(data,'report.pdf')
+    assert response.closed and len(calls)==1
+    assert calls[0]['stream'] is True

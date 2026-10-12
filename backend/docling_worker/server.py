@@ -3,8 +3,9 @@ import asyncio
 import tempfile
 import os
 from pathlib import Path
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from .execution import run_conversion
+from .streaming import response as streaming_response
 from pydantic import BaseModel, Field
 app=FastAPI(docs_url=None,redoc_url=None)
 lock=asyncio.Lock()
@@ -36,25 +37,33 @@ def read_source(uri):
     return bytes(data)
 
 @app.post('/parse-source')
-async def parse_source(source:StoredSource):
-    async with lock:
-        data=await asyncio.to_thread(read_source,source.source_uri)
-        with tempfile.TemporaryDirectory() as directory:
-            path=Path(directory)/('source'+Path(source.source_uri).suffix.lower());path.write_bytes(data)
-            return await run_conversion(path,source.max_tokens)
+async def parse_source(source:StoredSource,request:Request):
+    async def operation():
+        async with lock:
+            data=await asyncio.to_thread(read_source,source.source_uri)
+            with tempfile.TemporaryDirectory() as directory:
+                path=Path(directory)/('source'+Path(source.source_uri).suffix.lower());path.write_bytes(data)
+                return await run_conversion(path,source.max_tokens)
+    if 'application/x-ndjson' in request.headers.get('accept',''):
+        return streaming_response(operation)
+    return await operation()
 
 @app.get('/health')
 def health():return {'status':'ok','processor':'docling'}
 
 @app.post('/parse')
-async def parse(file:UploadFile=File(...),max_tokens:int=Form(768)):
+async def parse(request:Request,file:UploadFile=File(...),max_tokens:int=Form(768)):
     suffix=Path(file.filename or '').suffix.lower()
     if suffix not in {'.pdf','.doc','.docx','.txt','.md','.html','.xlsx','.pptx'}:
         raise HTTPException(415,'Unsupported Docling input format')
     if not 128<=max_tokens<=2048:raise HTTPException(422,'Invalid token limit')
     data=await file.read(20*1024*1024+1)
     if len(data)>20*1024*1024:raise HTTPException(413,'Upload limit: 20 MiB')
-    async with lock:
-        with tempfile.TemporaryDirectory() as directory:
-            path=Path(directory)/('source'+suffix);path.write_bytes(data)
-            return await run_conversion(path,max_tokens)
+    async def operation():
+        async with lock:
+            with tempfile.TemporaryDirectory() as directory:
+                path=Path(directory)/('source'+suffix);path.write_bytes(data)
+                return await run_conversion(path,max_tokens)
+    if 'application/x-ndjson' in request.headers.get('accept',''):
+        return streaming_response(operation)
+    return await operation()
