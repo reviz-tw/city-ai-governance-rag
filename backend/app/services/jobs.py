@@ -525,6 +525,12 @@ def run(job_id):
                 active.status, active.error = 'failed', f'{type(exc).__name__}: task could not be completed; review input and retry.'
                 if job.kind=='rechunk':
                     reason='parse_unavailable_or_timeout' if isinstance(exc,DoclingBusy) else type(exc).__name__
+                    if isinstance(exc,HTTPException):
+                        detail=str(exc.detail)
+                        if detail=='Document processor connection interrupted':reason='parse_connection_interrupted'
+                        elif detail=='Document processor stream ended before completion':reason='parse_incomplete_response'
+                        elif detail.startswith('Caller lease expired'):reason='caller_lease_expired'
+                        elif exc.status_code==504:reason='parse_timeout'
                     active.error=reason+'; no automatic retry'
                     active.result={'document_id':job.payload['document_id'],'status':'failed','reason':reason,'attempt':job.attempt}
                 if isinstance(exc, slide_authoring.SlideQualityError):

@@ -43,7 +43,7 @@ async def parse_source(source:StoredSource,request:Request):
             data=await asyncio.to_thread(read_source,source.source_uri)
             with tempfile.TemporaryDirectory() as directory:
                 path=Path(directory)/('source'+Path(source.source_uri).suffix.lower());path.write_bytes(data)
-                return await run_conversion(path,source.max_tokens)
+                return await run_conversion(path,source.max_tokens,caller_lease=request.headers.get('x-docling-lease'))
     if 'application/x-ndjson' in request.headers.get('accept',''):
         return streaming_response(operation)
     return await operation()
@@ -63,7 +63,7 @@ async def parse(request:Request,file:UploadFile=File(...),max_tokens:int=Form(76
         async with lock:
             with tempfile.TemporaryDirectory() as directory:
                 path=Path(directory)/('source'+suffix);path.write_bytes(data)
-                return await run_conversion(path,max_tokens)
+                return await run_conversion(path,max_tokens,caller_lease=request.headers.get('x-docling-lease'))
     if 'application/x-ndjson' in request.headers.get('accept',''):
         return streaming_response(operation)
     return await operation()

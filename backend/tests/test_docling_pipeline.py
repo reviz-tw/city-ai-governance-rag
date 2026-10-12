@@ -128,6 +128,12 @@ def test_deployed_batch_only_admin_can_apply_and_preserves_reviewed_sources(sour
 
 
 def test_large_stored_source_uses_trusted_storage_not_http_upload(monkeypatch):
+    from app.services import docling_lease
+    class FakeLease:
+        id='a'*32
+        def renew(self):pass
+        def close(self,**kwargs):pass
+    monkeypatch.setattr(docling_lease,'CallerLease',FakeLease)
     import requests
     from google.oauth2 import id_token
     monkeypatch.setattr(settings,'DOCLING_SERVICE_URL','https://processor.example.test')
@@ -255,7 +261,7 @@ def test_remote_stream_requires_completion_and_closes_connection(monkeypatch,ter
         status_code=200
         headers={'Content-Type':'application/x-ndjson'}
         closed=False
-        def iter_lines(self):
+        def iter_lines(self,**kwargs):
             yield b'{"event":"started"}'
             yield b'{"event":"running","elapsed_seconds":1200}'
             if terminal=='completed':yield json.dumps({'event':'completed','result':payload}).encode()
