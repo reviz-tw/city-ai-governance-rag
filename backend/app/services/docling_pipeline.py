@@ -67,7 +67,7 @@ def parse(data,filename,*,source_uri=None):
         from app.services.docling_lease import CallerLease
         lease=CallerLease()
         completed_stream=False
-        deadline=time.monotonic()+3660
+        deadline=time.monotonic()+settings.DOCLING_CALL_TIMEOUT_SECONDS
         try:
             if source_uri and len(data)>20*1024*1024:
                 allowed=[f'gs://{bucket}/{prefix}' for bucket,prefix in (
@@ -115,10 +115,16 @@ def parse(data,filename,*,source_uri=None):
             if os.environ.get('DOCLING_PERSISTENT')=='1':
                 persistent_convert(worker,path,output)
             else:
-                completed=subprocess.run([settings.DOCLING_PYTHON,str(worker),str(path),str(output),str(settings.DOCLING_CHUNK_TOKENS)],
-                    capture_output=True,timeout=1200)
-                if completed.returncode or not output.exists():raise HTTPException(422,'Docling parsing failed; original retained')
-            result=json.loads(output.read_text())
+                import asyncio
+                from docling_worker.execution import run_conversion
+                async def bounded():
+                    return await asyncio.wait_for(run_conversion(path,settings.DOCLING_CHUNK_TOKENS,
+                        timeout=settings.DOCLING_PARSE_TIMEOUT_SECONDS,python_executable=settings.DOCLING_PYTHON),
+                        timeout=settings.DOCLING_CALL_TIMEOUT_SECONDS)
+                try:result=asyncio.run(bounded())
+                except asyncio.TimeoutError as exc:
+                    raise HTTPException(504,'Docling caller deadline exceeded; parsing process stopped') from exc
+            if os.environ.get('DOCLING_PERSISTENT')=='1':result=json.loads(output.read_text())
     if result.get('original_hash')!=hashlib.sha256(data).hexdigest() or result.get('schema_version')!=1:
         raise HTTPException(422,'Docling result does not match the original document')
     from app.services.chunks import validate

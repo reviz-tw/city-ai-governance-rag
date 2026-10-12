@@ -246,7 +246,7 @@ def test_rechunk_checkpoint_keeps_hour_long_lease(source,parser,monkeypatch):
     jobs.checkpoint(queued['id'],0)
     with store.session() as db:
         job=db.get(store.Job,queued['id'])
-        assert job.lease_until==4900
+        assert job.lease_until==1000+settings.DOCLING_CALL_TIMEOUT_SECONDS+240
 
 
 @pytest.mark.parametrize('terminal',['completed','truncated','failed'])
@@ -275,3 +275,20 @@ def test_remote_stream_requires_completion_and_closes_connection(monkeypatch,ter
         with pytest.raises(HTTPException):docling_pipeline.parse(data,'report.pdf')
     assert response.closed and len(calls)==1
     assert calls[0]['stream'] is True
+
+
+def test_local_caller_deadline_terminates_parser(monkeypatch,tmp_path):
+    import asyncio,sys
+    from docling_worker import execution
+    monkeypatch.setattr(settings,'DOCLING_SERVICE_URL','')
+    monkeypatch.setattr(settings,'DOCLING_PYTHON',sys.executable)
+    monkeypatch.setattr(settings,'DOCLING_PARSE_TIMEOUT_SECONDS',60)
+    monkeypatch.setattr(settings,'DOCLING_CALL_TIMEOUT_SECONDS',.1)
+    real_spawn=asyncio.create_subprocess_exec;children=[]
+    async def spawn(*a,**k):
+        child=await real_spawn(sys.executable,'-c','import time; time.sleep(60)',start_new_session=True)
+        children.append(child);return child
+    monkeypatch.setattr(execution.asyncio,'create_subprocess_exec',spawn)
+    with pytest.raises(HTTPException) as exc:docling_pipeline.parse(b'Policy','policy.txt')
+    assert exc.value.status_code==504
+    assert children[0].returncode is not None

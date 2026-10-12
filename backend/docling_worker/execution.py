@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import HTTPException
 from . import leases
 
-async def run_conversion(path, max_tokens, *, timeout=None, caller_lease=None):
+async def run_conversion(path, max_tokens, *, timeout=None, caller_lease=None, python_executable=None):
     request_id=uuid.uuid4().hex
     started=time.monotonic()
     timeout=timeout or int(os.environ.get('DOCLING_PARSE_TIMEOUT_SECONDS','3600'))
@@ -18,7 +18,7 @@ async def run_conversion(path, max_tokens, *, timeout=None, caller_lease=None):
     if caller_lease and not await leases.alive(caller_lease):
         await leases.stopped(caller_lease,None)
         raise HTTPException(409,'Caller lease expired; parsing not started')
-    process=await asyncio.create_subprocess_exec(sys.executable,'-m','docling_worker.converter',str(path),str(output),str(max_tokens),env={**os.environ,'DOCLING_REQUEST_ID':request_id},start_new_session=True)
+    process=await asyncio.create_subprocess_exec(python_executable or sys.executable,'-m','docling_worker.converter',str(path),str(output),str(max_tokens),env={**os.environ,'DOCLING_REQUEST_ID':request_id},start_new_session=True)
     failure=None
     try:
         waiter=asyncio.create_task(process.wait())

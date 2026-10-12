@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     DOCLING_CHUNK_TOKENS: int = Field(768, ge=128, le=2048)
     DOCLING_TASKS_QUEUE: str = ''
     DOCLING_RUN_JOB: str = ''
+    DOCLING_PARSE_TIMEOUT_SECONDS: int = Field(5400,ge=1)
+    DOCLING_CALL_TIMEOUT_SECONDS: int = Field(5460,ge=1)
     SOFFICE_BIN: str = "soffice"
     FONT_DIR: str = "/usr/share/fonts/truetype/governance"
 

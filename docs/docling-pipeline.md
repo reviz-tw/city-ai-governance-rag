@@ -39,3 +39,5 @@ PDF backend 明確指定 PyPdfiumDocumentBackend（pypdfium2），解析結果�
 2026-10-12：遠端解析改為 application/x-ndjson 串流。每 15 秒回傳執行訊息，避免無資料的 HTTP 連線達到 Cloud Run 對外閒置 20 分鐘上限。解析仍為 3600 秒，呼叫端整體限期 3660 秒；socket 無資料 90 秒視為斷線。串流結束但沒有 completed 結果不得標記成功。呼叫端會關閉回應，服務端在斷線時取消解析 task，終止程序群組並等待清理後才釋放鎖；docling_process_stopped 在失敗紀錄之前輸出。串流失敗記錄不自動重試。
 
 Cloud Run 代理不一定會將下游斷線即時傳給容器，因此串流另外使用 artifact bucket 的 docling-leases/<UUID>.json 存活標記。呼叫端接收進度時更新標記；處理器每 15 秒核對，標記逾 45 秒或不存在時終止程序群組。失敗時呼叫端撤銷标記並等待程序停止的 .stopped.json 確認（最多 75 秒）；無法收到確認會記錄 cleanup_ack_missing。正常完成也清除標記。標記不包含文件全文，不改動來源、草稿或發布內容。
+
+2026-10-13：90分鐘批次解析直接在 city-docling-batch Job 容器內執行，不經過有60分鐘上限的HTTP服務。模型與後端套件以不同Python環境隔離；解析子程序5400秒、呼叫端等待5460秒（多60秒清理餘裕），lease為呼叫端上限加240秒。整批Job上限24小時以容納逐份執行，max-retries=0、6Gi、2CPU；逾時會終止程序群組再記錄失敗。一般HTTP服務上限仍為3600秒，不可設5400秒；此批次不走該服務。

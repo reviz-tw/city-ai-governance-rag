@@ -1,0 +1,10 @@
+ARG DOCLING_IMAGE
+FROM ${DOCLING_IMAGE}
+# Backend orchestration has its own environment; keep pinned parser/model deps intact.
+COPY backend/requirements.txt /tmp/backend-requirements.txt
+RUN python -m venv /opt/batch && /opt/batch/bin/pip install --no-cache-dir -r /tmp/backend-requirements.txt
+COPY backend/app /app/app
+COPY backend/docling_worker /app/docling_worker
+ENV PATH=/opt/batch/bin:$PATH DOCLING_IN_PROCESSOR_JOB=1 DOCLING_PYTHON=/usr/local/bin/python DOCLING_PARSE_TIMEOUT_SECONDS=5400 DOCLING_CALL_TIMEOUT_SECONDS=5460
+RUN python -c "from app.services import docling_pipeline; result=docling_pipeline.parse(b'Batch parser smoke test.', 'smoke.txt'); assert result['chunks']"
+CMD ["python", "-m", "app.services.rechunk_runner"]

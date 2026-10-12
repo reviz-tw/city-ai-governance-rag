@@ -26,10 +26,22 @@ steps:
       - '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}'
     id: 'push-image'
 
-  # Rechunk requests may run for an hour; Cloud Tasks only starts this sequential job.
+  # Dedicated parser image avoids Cloud Run HTTP's 60-minute request ceiling.
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [pull, '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/city-docling-batch:latest']
+    allowFailure: true
+    id: 'pull-docling-batch-cache'
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [build, '--cache-from=${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/city-docling-batch:latest', '--build-arg=DOCLING_IMAGE=${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/city-docling:latest', -f, backend/docling_worker/Dockerfile.batch, -t, '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/city-docling-batch:${_TAG}', -t, '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/city-docling-batch:latest', .]
+    id: 'build-docling-batch'
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [push, --all-tags, '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/city-docling-batch']
+    id: 'push-docling-batch'
+
+  # Cloud Tasks only starts this sequential job; parsing runs inside its container.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
-    args: [run, jobs, deploy, city-docling-batch, '--image=${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:${_TAG}', '--region=${_LOCATION}', '--command=python', '--args=-m,app.services.rechunk_runner', '--tasks=1', '--parallelism=1', '--max-retries=0', '--task-timeout=86400s', '--cpu=1', '--memory=1Gi', '--service-account=59297909591-compute@developer.gserviceaccount.com', '--env-vars-file=infra/env.dev.yaml', '--set-secrets=AUTH_SESSION_SECRET=${_SESSION_SECRET}:latest,DATABASE_URL=${_DATABASE_SECRET}:latest', '--set-cloudsql-instances=${PROJECT_ID}:${_LOCATION}:${_SQL_INSTANCE}']
+    args: [run, jobs, deploy, city-docling-batch, '--image=${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/city-docling-batch:${_TAG}', '--region=${_LOCATION}', '--command=python', '--args=-m,app.services.rechunk_runner', '--tasks=1', '--parallelism=1', '--max-retries=0', '--task-timeout=86400s', '--cpu=2', '--memory=6Gi', '--service-account=59297909591-compute@developer.gserviceaccount.com', '--env-vars-file=infra/env.dev.yaml', '--set-secrets=AUTH_SESSION_SECRET=${_SESSION_SECRET}:latest,DATABASE_URL=${_DATABASE_SECRET}:latest', '--set-cloudsql-instances=${PROJECT_ID}:${_LOCATION}:${_SQL_INSTANCE}']
     id: 'deploy-docling-batch'
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud

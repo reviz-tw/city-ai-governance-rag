@@ -1,5 +1,6 @@
 """Single-attempt sequential rechunk execution outside HTTP task deadlines."""
 import logging
+import os
 import time
 from sqlalchemy import select,text
 from app.core.config import settings
@@ -41,4 +42,8 @@ def drain():
 
 if __name__=='__main__':
     logging.basicConfig(level=logging.INFO)
+    if os.environ.get('DOCLING_IN_PROCESSOR_JOB')=='1':
+        settings.DOCLING_SERVICE_URL=''
+        settings.DOCLING_PYTHON='/usr/local/bin/python'
+        logger.info('docling_local_job parse_timeout=%s caller_timeout=%s',settings.DOCLING_PARSE_TIMEOUT_SECONDS,settings.DOCLING_CALL_TIMEOUT_SECONDS)
     drain()
