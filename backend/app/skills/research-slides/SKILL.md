@@ -50,3 +50,10 @@ The application validates citations, quotation fidelity, numeric evidence, field
 The review must assess every slide separately, including its notes, against its own cited blocks. Identify strengthened obligations, invented article numbers, missing conditions and properties asserted for an entire comparison column without evidence. Return a short assessment per slide plus actionable issues; a citation ID alone does not prove the claim is supported.
 
 Use fixed native slide objects for editable content. Model responses describe content and layouts; they must never contain executable code, remote image URLs, HTML or arbitrary drawing instructions.
+
+
+## Measured visible-text budgets
+
+These are conservative composition targets, not permission to clip content. Count CJK characters as one unit and Latin letters as approximately half a unit. Title: at most 40 units; takeaway: 60; point labels: 12. Briefing details: 60 units for 2–3 points, 38 for 4 points. Process details: 50 units for 2–3 steps, 35 for 4, 24 for 5. Evidence explanations: 35 units for two points; choose a short verbatim quote. Comparison cells: 35 units for two body rows, 24 for three, 12 for four; headings: 12. Chart labels: 12. Visible final limitations: 70 units; keep full qualifications in notes. Fewer points/rows can preserve useful detail within the requested page count.
+
+Actual font measurements remain authoritative. The application identifies all overflowing fields and allows up to two targeted layout repair rounds before source review, preserving each original value in speaker notes. Source/structure repair remains limited to one pass. Never change numeric data, invent facts, silently truncate text, or shrink below the renderer's readable font minimum.

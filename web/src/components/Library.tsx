@@ -6,6 +6,7 @@ import {JobView} from './ArtifactPanel';
 import {useLocale} from '../lib/locale';
 import {ChunkDraftEditor} from './ChunkDraftEditor';
 import {MAX_PUBLICATION_CHUNKS} from '../lib/chunks';
+import {ExtractionWarnings} from './ExtractionWarnings';
 
 function LibraryFrame({standalone, editing, onClose, children}: {standalone:boolean; editing:boolean; onClose:()=>void; children:ReactNode}) {
   const {t} = useLocale();
@@ -122,9 +123,9 @@ export function Library({editor, admin=false, standalone=false, onClose, onSessi
       void run(async()=>{loadDoc(await api('/api/library/legacy-draft',jsonRequest({filename:item.filename})));await refresh();});
     }}>{t('openDraft')}</button>}</div>)}</details>}
     </>}
-    {doc?.editable && editor && <section className="chunk-editor" aria-label={t('editor')}><button className="btn btn-secondary" onClick={()=>dirty?setConfirmation('leave'):setDoc(null)}>{t('back')}</button><h2 tabIndex={-1} ref={editorHeading}>{doc.title} · {t('draftRevision',{revision:doc.draft_revision})}</h2><p>{label(doc.index_status)} · {t('publishedVersion',{version:doc.published_version})} · <span className={doc.my_review?'review-done':'review-pending'}>{t(doc.my_review?'reviewDone':'reviewPending')}</span>{doc.has_structured_tables&&<> · {t('tableSource')}</>}</p><DocumentActivity document={doc}/>
+    {doc?.editable && editor && <section className="chunk-editor" aria-label={t('editor')}><div className="library-actions"><button className="btn btn-secondary" onClick={()=>dirty?setConfirmation('leave'):setDoc(null)}>{t('back')}</button><a className="btn btn-secondary" href={`/api/library/${encodeURIComponent(doc.id)}/original`} target="_blank" rel="noreferrer" download>{t('downloadOriginal')}</a></div><h2 tabIndex={-1} ref={editorHeading}>{doc.title} · {t('draftRevision',{revision:doc.draft_revision})}</h2><p>{label(doc.index_status)} · {t('publishedVersion',{version:doc.published_version})} · <span className={doc.my_review?'review-done':'review-pending'}>{t(doc.my_review?'reviewDone':'reviewPending')}</span>{doc.has_structured_tables&&<> · {t('tableSource')}</>}</p><DocumentActivity document={doc}/>
       <p>{t('reviewHint')}</p>
-      {doc.warnings?.length>0 && <p>{t('extractionNote')}</p>}
+      <ExtractionWarnings warnings={[...(doc.warnings||[]),...(doc.metadata?.docling?.warnings||[])]} audit={doc.metadata?.docling?.ocr_audit}/>
       <div className="chunk-reflow-tools"><button className="btn btn-secondary" onClick={()=>run(async()=>{
         const result=await api(`/api/library/${doc.id}/preview-reflow`,jsonRequest({revision:doc.draft_revision,chunks:doc.draft}));
         if(result.changed){setReflowUndo({before:doc.draft,after:JSON.stringify(result.chunks)});mutateChunks(result.chunks);}

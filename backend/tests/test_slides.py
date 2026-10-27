@@ -5,7 +5,7 @@ import zipfile
 import pytest
 from pptx import Presentation
 from pydantic import ValidationError
-from app.models.artifacts import ArtifactDraft, ArtifactRequest, DeckOutline, Slide
+from app.models.artifacts import ArtifactDraft, ArtifactRequest, DeckOutline, Slide, SlideDeckDraft
 from app.services import jobs, renderers, slide_authoring, gemini, store
 
 
@@ -76,6 +76,55 @@ def test_readable_layout_refuses_overflow_instead_of_truncating(source):
     value=ArtifactDraft.model_validate(value).model_dump()
     with pytest.raises(ValueError,match='readable slide area'):
         renderers.pptx(value,'zh-TW',[dict(id=source['id'],title='Source',version=source['original_hash'])])
+
+
+def test_layout_repairs_all_dense_fields_preserving_originals_and_citations(source,monkeypatch):
+    from app.services.slide_rendering import SlideLayoutError
+    ref=dict(document_id=source['id'],block_id='p2')
+    value=deck(ref)
+    original='必須保留原始文件與人工覆核的重要限制條件。'*8
+    value['slides'][0]['points']=[dict(label='人工覆核',detail=original) for _ in range(4)]
+    value=SlideDeckDraft.model_validate(value).model_dump()
+    sources=[dict(id=source['id'],title='Source',version=source['original_hash'])]
+    with pytest.raises(SlideLayoutError) as error:renderers.pptx(value,'zh-TW',sources)
+    assert len(error.value.issues)==4
+    assert error.value.issues[0]['path']==['slides',0,'points',0,'detail']
+    assert original not in str(error.value)
+    def repair(payload,system,schema,**kwargs):
+        data=json.loads(payload)
+        assert len(data['fields'])==4
+        return json.dumps({'patches':[dict(path=f['path'],text='保留來源並人工覆核。') for f in data['fields']]})
+    monkeypatch.setattr(gemini,'generate',repair)
+    repaired=slide_authoring.repair_layout(SlideDeckDraft.model_validate(value),error.value.issues,'Rules',{'evidence':[]})
+    assert original in repaired.slides[0].notes
+    assert repaired.slides[0].citations[0].model_dump()==ref
+    assert renderers.pptx(repaired.model_dump(),'zh-TW',sources)
+
+
+def test_layout_repair_cannot_change_unrequested_fields(source,monkeypatch):
+    from app.services.slide_rendering import SlideLayoutError
+    ref=dict(document_id=source['id'],block_id='p2')
+    value=deck(ref);value['slides'][0]['title']='Very long title '*20
+    # Use a valid schema for the repair contract and a measured field diagnostic.
+    value['slides'][0]['title']='Long title'
+    monkeypatch.setattr(gemini,'generate',lambda *a,**k:json.dumps({'patches':[dict(path=['slides',0,'notes'],text='Altered')]}))
+    with pytest.raises(ValueError,match='exactly the failed fields'):
+        slide_authoring.repair_layout(SlideDeckDraft.model_validate(value),[dict(path=['slides',0,'title'],lines=3,max_lines=2)],'Rules',{'evidence':[]})
+
+
+def test_explicit_retry_refreshes_slide_rules_and_preserves_source_snapshot(source,monkeypatch):
+    monkeypatch.setattr(jobs,'dispatch_job',lambda *args:None)
+    request=ArtifactRequest(kind='pptx',scope='answer',message_ids=['a1'],source_ids=[source['id']],pages=3)
+    created=jobs.create(request)
+    with store.session() as db:
+        job=db.get(store.Job,created['id']);job.status='failed'
+        job.payload={**job.payload,'slide_skill_version':'older-rules'}
+        snapshot=job.payload['sources'];db.commit()
+    jobs.mutate(created['id'],'retry',jobs.get(created['id']).revision)
+    retried=jobs.get(created['id'])
+    assert retried.payload['slide_skill_version']==slide_authoring.version()
+    assert retried.payload['previous_slide_skill_versions']==['older-rules']
+    assert retried.payload['sources']==snapshot and retried.status=='queued'
 
 
 def test_quotes_allow_pdf_line_wraps_but_preserve_words_and_qualifications(source):

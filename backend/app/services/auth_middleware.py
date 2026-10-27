@@ -2,7 +2,7 @@ import re
 from fastapi import HTTPException, Request
 from starlette.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
-from app.services.auth import authenticate, check_origin, current_user
+from app.services.auth import authenticate, check_origin, current_user, User
 
 class AuthenticationMiddleware:
     def __init__(self, app):
@@ -28,6 +28,9 @@ class AuthenticationMiddleware:
                     raise HTTPException(403, 'MCP session does not belong to this user')
         except HTTPException as exc:
             return await JSONResponse({'detail':exc.detail}, status_code=exc.status_code)(scope, receive, send)
+        # MCP transports can retain execution context beyond this HTTP request.
+        # Keep their live role lookup; Web roles are cached only for one request.
+        if user and path.startswith('/mcp'):user=User(user.id,user.email)
         token = current_user.set(user)
         owned_sessions = []
         async def authenticated_send(message):

@@ -5,6 +5,7 @@ import {CONTENT_LANGUAGES} from '../lib/languages';
 import {useLocale} from '../lib/locale';
 import {Citation} from '../types';
 import {JobView} from './ArtifactPanel';
+import {sourceDisplayText} from '../lib/source-display';
 
 export function SourceReader({citation, language, onClose}: {citation:Citation; language:string; onClose:()=>void}) {
   const {t, error:errorText} = useLocale();
@@ -30,9 +31,9 @@ export function SourceReader({citation, language, onClose}: {citation:Citation; 
     {doc&&<><h2>{doc.title}</h2><p>{t('sourceLanguage')}: {CONTENT_LANGUAGES[doc.language as keyof typeof CONTENT_LANGUAGES]||doc.language} · {t('version')}: {doc.original_hash.slice(0,12)}</p>
       <a className="btn btn-secondary" href={`/api/library/${id}/original`} target="_blank" rel="noreferrer">{t('openOriginal')}</a>
       {stale&&<p role="alert">{t('stale')}</p>}
-      {!blocks.length?<><p>{t('noPassage')}</p><blockquote dir="auto">{citation.snippet}</blockquote></>:<>
+      {!blocks.length?<><p>{t('noPassage')}</p><blockquote className="source-passage" dir="auto">{sourceDisplayText(citation.snippet || '')}</blockquote></>:<>
         <p>{t('citedCount',{count:blocks.length})}</p>
-        {blocks.map((b:any)=><section key={b.id} className="source-block" dir="auto"><small>{t('page')} {b.page??t('unknownPage')} · {b.id}</small><p className="whitespace-pre-wrap">{b.text}</p></section>)}
+        {blocks.map((b:any)=><section key={b.id} className="source-block" dir="auto"><small>{t('page')} {b.page??t('unknownPage')} · {b.id}</small><p className="source-passage">{sourceDisplayText(b.text)}</p></section>)}
         <label>{t('translateTarget')}<select value={target} onChange={e=>setTarget(e.target.value)}>{Object.entries(CONTENT_LANGUAGES).map(([code,name])=><option key={code} value={code}>{name}</option>)}</select></label>
         {doc.warnings?.length>0&&<><p>{t('extractionNote')}</p><label><input type="checkbox" checked={ack} onChange={e=>setAck(e.target.checked)}/>{t('extractionAck')}</label></>}
         {blocks.length>50&&<p role="alert">{t('tooLarge')}</p>}

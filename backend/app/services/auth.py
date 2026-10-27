@@ -2,7 +2,7 @@ import time
 import hashlib
 import secrets
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import jwt
 from fastapi import APIRouter, HTTPException, Request, Response
 from google.oauth2 import id_token
@@ -14,16 +14,17 @@ from app.core.config import settings
 class User:
     id: str
     email: str
+    role: str | None = None
 
     @property
     def admin(self):
         from app.services.accounts import role_for
-        return role_for(self.email) == 'admin'
+        return (self.role if self.role is not None else role_for(self.email)) == 'admin'
 
     @property
     def editor(self):
         from app.services.accounts import role_for
-        return role_for(self.email) in {'admin', 'editor'}
+        return (self.role if self.role is not None else role_for(self.email)) in {'admin', 'editor'}
 
 current_user: ContextVar[User | None] = ContextVar('current_user', default=None)
 
@@ -44,9 +45,11 @@ def require_editor() -> User:
 
 def allowed_user(user: User) -> User:
     from app.services.accounts import role_for
-    if role_for(user.email) is None:
+    role = role_for(user.email)
+    if role is None:
         raise HTTPException(403, 'This account is not enabled for this workspace')
-    return user
+    # A request-local snapshot, never a login-lifetime permission cache.
+    return replace(user, role=role)
 
 
 def verify_google(credential: str) -> User:

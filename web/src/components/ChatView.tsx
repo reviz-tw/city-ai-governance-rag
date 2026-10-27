@@ -7,6 +7,7 @@ import {researchCopy} from '../lib/research-copy';
 import {answerEvidence, CITATION_MARKER, citationIds} from '../lib/answer-artifact';
 import {useLocale} from '../lib/locale';
 import {WorkspacePanel} from './WorkspacePanel';
+import {sourceDisplayText} from '../lib/source-display';
 
 interface ChatViewProps {
   t: UIStrings; lang: InterfaceLanguage; messages: ChatMessage[]; loading: boolean;
@@ -30,6 +31,15 @@ export function ChatView({t, lang, messages, loading, onSendMessage, onClearHist
   const latestAnswer = [...messages].reverse().find(m => m.role === 'assistant');
   const sourceMessage = messages.find(m => m.id === sourceMessageId) || latestAnswer;
   const citations = sourceMessage?.citations || [];
+  const statusCopy: Record<InterfaceLanguage, [string,string,string]> = {
+    zh:['正在理解問題並搜尋來源……','已找到來源，正在整理回答……','沒有找到來源，正在整理搜尋結果……'],
+    en:['Understanding the question and searching sources…','Sources found; preparing the answer…','No sources found; preparing the result…'],
+    ja:['質問を確認し、資料を検索しています…','資料を確認し、回答を作成しています…','資料が見つかりませんでした。結果を整理しています…'],
+    fr:['Analyse de la question et recherche des sources…','Sources trouvées, préparation de la réponse…','Aucune source trouvée, préparation du résultat…'],
+    es:['Analizando la pregunta y buscando fuentes…','Fuentes encontradas, preparando la respuesta…','No se encontraron fuentes; preparando el resultado…'],
+    ru:['Анализ вопроса и поиск источников…','Источники найдены, готовим ответ…','Источники не найдены, готовим результат…'],
+  };
+  const retryCopy: Record<InterfaceLanguage,string> = {zh:'重新提問',en:'Retry question',ja:'もう一度質問',fr:'Réessayer',es:'Reintentar',ru:'Повторить вопрос'};
 
   useEffect(() => {
     setSourceMessageId(latestAnswer?.id || ''); setSelectedCitation(null); setCopyError('');
@@ -89,7 +99,7 @@ export function ChatView({t, lang, messages, loading, onSendMessage, onClearHist
         <button className="citation-card-select" aria-expanded={selectedCitation === citation.citation_id} onClick={() => setSelectedCitation(selectedCitation === citation.citation_id ? null : citation.citation_id)}>
           <span className="citation-card-title"><span className="citation-number">[{citation.citation_id}]</span><strong>{citation.title}</strong></span>
           <span className="citation-meta">{CONTENT_LANGUAGES[citation.language as keyof typeof CONTENT_LANGUAGES] || citation.language}{citation.page_start != null && ` · ${c.page} ${citation.page_start}${citation.page_end && citation.page_end !== citation.page_start ? `–${citation.page_end}` : ''}`}</span>
-          {citation.snippet && <span className="citation-snippet" dir="auto">{citation.snippet}</span>}
+          {citation.snippet && <span className="citation-snippet" dir="auto">{sourceDisplayText(citation.snippet)}</span>}
         </button>
         {selectedCitation === citation.citation_id && <div className="citation-actions">
           {citation.document_id ? <button className="btn btn-secondary" onClick={() => {setSourcesOpen(false); onOpenSource(citation,sourceMessage?.response_language || (lang==='zh'?'zh-TW':lang));}}>{c.read}</button> : citation.link && /^https?:\/\//i.test(citation.link) ? <a className="btn btn-secondary" href={citation.link} target="_blank" rel="noreferrer">{c.read}</a> : null}
@@ -111,7 +121,7 @@ export function ChatView({t, lang, messages, loading, onSendMessage, onClearHist
           <div className="welcome-steps">{c.steps.map((step, index) => <div key={step}><span>0{index + 1}</span><p>{step}</p></div>)}</div>
         </div> : <div className="conversation">
           {messages.map(message => message.role === 'user' ? <div className="user-message" key={message.id}><p dir="auto">{message.content}</p></div> : <article className="assistant-message" key={message.id}>
-            {message.isStreaming && !message.content && <div className="search-status" role="status"><span className="loading-dots"><i/><i/><i/></span><span>{t.searchingText}</span></div>}
+            {message.isStreaming && !message.content && <div className="search-status" role="status"><span className="loading-dots"><i/><i/><i/></span><span>{message.stage === 'generating' ? statusCopy[lang][message.sourceCount ? 1 : 2] : statusCopy[lang][0]}</span></div>}
             <div className="answer-content" dir="auto" lang={message.response_language}>{formatted(message)}</div>
             {message.error && <p role="alert" className="error-message">{message.error}</p>}
             {message.isStreaming && message.content && <span className="streaming-mark" role="status" aria-label={t.searchingText}/>}
@@ -119,6 +129,7 @@ export function ChatView({t, lang, messages, loading, onSendMessage, onClearHist
               <span className="answer-time">{message.timestamp}</span>
               {!!message.citations?.length && <button className="btn btn-ghost answer-sources" onClick={() => showSources(message)}><BookOpen size={14}/>{t.sourcesHeader} · {message.citations.length}</button>}
               <button className="btn btn-ghost" disabled={!message.content} onClick={() => void copy(message)}>{copiedId === message.id ? <Check size={13}/> : <Copy size={13}/>}{copiedId === message.id ? t.copiedBtn : t.copyBtn}</button>
+              {message.error && <button className="btn btn-ghost" disabled={loading} onClick={() => {const index=messages.findIndex(m=>m.id===message.id);const previous=messages.slice(0,index).reverse().find(m=>m.role==='user');if(previous)onSendMessage(previous.content);}}>{retryCopy[lang]}</button>}
               {!message.error && answerEvidence(message).source_ids.length>0 && <>{(['pdf','pptx','chart'] as const).map(kind=><button className="btn btn-ghost" key={kind} onClick={()=>onArtifact(kind,message)}>{text(kind==='pdf'?'createPdf':kind==='pptx'?'createSlides':'createChart')}</button>)}</>}
               <button className="btn btn-ghost" disabled={loading} onClick={onClearHistory} title={t.clearHistoryTitle}><RotateCcw size={13}/>{t.restartBtn}</button>
             </footer>}

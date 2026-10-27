@@ -40,7 +40,7 @@ def test_summary_provenance_and_resume_context():
     assert len(saved['summaries'])==2
     assert saved['summaries'][0]['through_sequence']==1
     assert saved['summaries'][1]['source_turn_ids']==ids[:2]
-    assert saved['summaries'][1]['method'].startswith('model-v1:')
+    assert saved['summaries'][1]['method']=='extractive-v2'
     tid,context=c.begin(sid,'續問')
     assert context.persisted and context.summary==saved['summaries'][-1]['text']
     assert len(context.history)==6
@@ -70,7 +70,7 @@ def test_summary_failure_fallback_keeps_history(monkeypatch):
     sid=c.create_session()['id']
     ids=[complete(sid,f'需求{i}')[0] for i in range(5)]
     saved=c.read_session(sid)
-    assert saved['summaries'][-1]['method']=='extractive-v1'
+    assert saved['summaries'][-1]['method']=='extractive-v2'
     assert '需求0' in saved['summaries'][-1]['text'] and '需求1' in saved['summaries'][-1]['text']
     assert saved['summaries'][-1]['source_turn_ids']==ids[:2]
     assert len(saved['messages'])==10
@@ -128,7 +128,7 @@ def test_expired_lease_recovery_and_stale_writer():
 
 def test_persisted_summary_is_not_silently_rewritten(monkeypatch):
     from app.services import context
-    monkeypatch.setattr(context.gemini,'generate',lambda *args:json.dumps({
+    monkeypatch.setattr(context.gemini,'generate',lambda *args,**kwargs:json.dumps({
         'retrieval_query':'獨立查詢','summary':'未追溯的新摘要','city':None}))
     supplied=context.ResearchContext(persisted=True,summary='已追溯的摘要',history=[
         context.HistoryMessage(id=str(i),role='user',content='近期提問') for i in range(6)])

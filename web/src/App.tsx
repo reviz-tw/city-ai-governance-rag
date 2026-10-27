@@ -68,19 +68,24 @@ export default function App() {
     setLoading(true);
     const update = (changes: Partial<ChatMessage>) => setMessages(prev => prev.map(m => m.id === id ? {...m,...changes} : m));
     let content = '';
+    const started = performance.now();
+    let sourcesAt: number | undefined, firstTextAt: number | undefined;
     try {
       let activeSession=sessionId;
       if(!activeSession){const created=await api('/api/sessions',{method:'POST'});activeSession=created.id;setSessionId(activeSession);}
       const response = await fetch('/api/chat/stream', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({session_id:activeSession,query:text, city:null, response_language:'auto', interface_language:lang === 'zh' ? 'zh-TW':lang, source_languages:[]})});
       if (!response.ok || !response.body) throw new ApiError(`Request failed (${response.status})`,response.status);
       for await (const event of readSSE(response.body)) {
-        if (event.type === 'sources') {
+        if (event.type === 'status') {
+          update({stage:event.stage, sourceCount:event.source_count});
+        } else if (event.type === 'sources') {
+          sourcesAt = performance.now() - started;
           update({citations:event.sources, response_language:event.response_language});
-        } else if (event.type === 'chunk') {content += event.text; update({content});}
-        else if (event.type === 'error') {update({error:event.message}); if (!content) update({content:event.message});}
+        } else if (event.type === 'chunk') {if (firstTextAt === undefined) firstTextAt = performance.now() - started; content += event.text; update({content});}
+        else if (event.type === 'error') {update({error:event.message});}
       }
-    } catch (e: any) {const message=panelText(lang,panelError(e)); update({content:content || message, error:message});}
-    finally {update({isStreaming:false}); setLoading(false);setSessionRevision(v=>v+1);}
+    } catch (e: any) {const message=panelText(lang,panelError(e)); update({error:message});}
+    finally {console.debug('rag_client_timing_ms', {sources:sourcesAt, first_text:firstTextAt, total:performance.now()-started}); update({isStreaming:false}); setLoading(false);setSessionRevision(v=>v+1);}
   };
   if (checking) return <div className="app-loading" role="status"><span className="brand-dot"/>{panelText(lang,'loading')}</div>;
   if (!user) return <Login onLogin={setUser}/>;

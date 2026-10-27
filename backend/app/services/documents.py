@@ -194,7 +194,8 @@ def create(data: bytes, filename: str, mime: str, metadata: dict, cleaned_text: 
     parsed = docling_pipeline.parse(data, filename) if docling_pipeline.enabled() else None
     blocks, warnings = (parsed['blocks'], parsed['warnings']) if parsed else extract(data, filename)
     if parsed:
-        metadata = {**metadata, 'docling': {'pdf_backend':parsed.get('pdf_backend'),**{k:parsed[k] for k in ('parser_version','tokenizer','max_tokens','schema_version')}}}
+        metadata = {**metadata, 'docling': {'pdf_backend':parsed.get('pdf_backend'),**{k:parsed[k] for k in ('parser_version','tokenizer','max_tokens','schema_version')},
+                    **{k:parsed[k] for k in ('ocr_policy','ocr_audit','warnings') if k in parsed}}}
     try:
         language = normalize_language(metadata.get('language') or detect('\n'.join(b['text'] for b in blocks)[:4000]) or 'zh-TW')
     except ValueError:

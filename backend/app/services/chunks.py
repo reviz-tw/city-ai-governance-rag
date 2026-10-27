@@ -6,6 +6,9 @@ import time
 import uuid
 from fastapi import HTTPException
 from sqlalchemy import select, func
+from sqlalchemy.orm import load_only
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from app.core.config import settings
 from app.services import store, documents, cloud
 from app.services.auth import require_user, User, allowed_user
@@ -339,28 +342,53 @@ def indexed(document_id):
 def search(query, city=None, languages=None):
     if not settings.CHUNK_INDEX_ENABLED or not settings.CHUNK_DATA_STORE_ID:return []
     user=require_user()
+    if user.role is None:user=allowed_user(user)
     with store.session() as db:
         eligible={p.index_document_id:(d,p) for d,p in db.execute(select(store.Document,store.Publication).join(
             store.Publication,store.Publication.document_id==store.Document.id).where(
-            store.Publication.version==store.Document.published_version,store.Publication.status=='published'))
+            store.Publication.version==store.Document.published_version,store.Publication.status=='published').options(
+                load_only(store.Document.id,store.Document.owner,store.Document.shared,store.Document.readers,
+                    store.Document.title,store.Document.language,store.Document.metadata_json,store.Document.published_version),
+                load_only(store.Publication.id,store.Publication.document_id,store.Publication.version,store.Publication.index_document_id)))
             if documents.can_read(d,user) and (p.index_document_id or '').startswith('cad-')
             and (not city or d.metadata_json.get('city')==city) and (not languages or d.language in languages)}
     if not eligible:return []
-    keys=list(eligible);ranked=[]
-    # Scope Search BEFORE ranking, so private/stale documents cannot crowd out allowed evidence.
-    for offset in range(0,len(keys),25):
-        scope='publication_key: ANY('+', '.join(json.dumps(k) for k in keys[offset:offset+25])+')'
-        response=cloud.request(cloud.search_path(),{'query':query,'pageSize':30,'filter':scope,
-            'contentSearchSpec':{'searchResultMode':'DOCUMENTS'}},'POST')
-        ranked.extend((rank,item) for rank,item in enumerate(response.get('results',[])))
+    # Scope before ranking; a result page size is not a corpus size limit.
+    # Bound filter bytes for larger corpora, rather than imposing 25 sources.
+    groups=[]; group=[]
+    for key in eligible:
+        trial=group+[key]
+        expression='publication_key: ANY('+', '.join(json.dumps(k) for k in trial)+')'
+        if group and len(expression.encode())>16000:
+            groups.append(group);group=[key]
+        else:group=trial
+    if group:groups.append(group)
+    def fetch(keys):
+        scope='publication_key: ANY('+', '.join(json.dumps(k) for k in keys)+')'
+        return cloud.request(cloud.search_path(),{'query':query,'pageSize':30,'filter':scope,
+            'contentSearchSpec':{'searchResultMode':'DOCUMENTS'}},'POST').get('results',[])
+    if len(groups)==1:pages=[fetch(groups[0])]
+    else:
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures=[pool.submit(copy_context().run,fetch,group) for group in groups]
+            pages=[future.result() for future in futures]
+    ranked=[(rank,item) for page in pages for rank,item in enumerate(page)]
     results=[];seen=set()
     with store.session() as db:
+        current_docs={};current_pubs={}
         for rank,item in sorted(ranked,key=lambda pair:pair[0]):
             remote=item.get('document',{});meta=remote.get('structData',{})
             pair=eligible.get(meta.get('publication_key'))
             if not pair:continue
             snapshot,pub=pair
-            doc=db.get(store.Document,snapshot.id)
+            if snapshot.id not in current_docs:
+                current_docs[snapshot.id]=db.get(store.Document,snapshot.id,options=[load_only(
+                    store.Document.id,store.Document.owner,store.Document.shared,store.Document.readers,
+                    store.Document.title,store.Document.language,store.Document.published_version)])
+            doc=current_docs[snapshot.id]
+            if pub.id not in current_pubs:current_pubs[pub.id]=db.get(store.Publication,pub.id)
+            pub=current_pubs[pub.id]
+            if pub is None:continue
             if not doc or not documents.can_read(doc,user) or doc.published_version!=pub.version:continue
             chunk=next((c for c in pub.chunks if c['id']==meta.get('chunk_id')),None)
             if not chunk or remote.get('id')!=index_id(pub,chunk):continue

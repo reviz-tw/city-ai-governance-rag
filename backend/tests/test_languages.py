@@ -53,3 +53,7 @@ def test_code_validation():
     with pytest.raises(ValidationError): ChatStreamRequest(query='q', source_languages=['ar'])
     from app.models.artifacts import ArtifactRequest
     with pytest.raises(ValidationError): ArtifactRequest(kind='translation', language='ar')
+
+@pytest.mark.parametrize("question", ["那台北呢？", "請繼續", "比較 AI 風險"])
+def test_short_chinese_does_not_inherit_another_answer_language(question):
+    assert resolve(question, interface_language="en", recent_languages=["en"]).language == "zh-TW"

@@ -68,7 +68,7 @@ test('Every panel label has all six locales with consistent substitutions',()=>{
 const {answerEvidence,citationIds}=load('src/lib/answer-artifact.ts');
 test('Live model citation formats select only cited sources for output actions',()=>{
   const citations=[{citation_id:1,document_id:'taipei',block_ids:['p1']},{citation_id:2,document_id:'taoyuan',block_ids:['p2']},{citation_id:3,document_id:'unused'}];
-  for(const content of ['Evidence [citation:1] and [citation:1, citation:2].','Evidence [1, 2].','Evidence [citation:1, 2].']) {
+  for(const content of ['Evidence [citation:1] and [citation:1, citation:2].','Evidence [1, 2].','Evidence [citation:1, 2].','Evidence [citation_1, citation_2].']) {
     const evidence=answerEvidence({id:'live-answer',content,citations});
     assert.deepEqual(evidence.source_ids,['taipei','taoyuan']);
     assert.deepEqual(evidence.source_passages,{taipei:['p1'],taoyuan:['p2']});

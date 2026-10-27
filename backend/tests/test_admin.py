@@ -23,6 +23,21 @@ def login(client, role):
 HEADERS = {'origin': 'http://localhost:5173'}
 
 
+def test_original_download_preserves_unicode_filename_bytes_and_access(client):
+    from urllib.parse import quote
+    login(client,'editor')
+    data='已人工校對的原始文件'.encode()
+    doc=documents.create(data,'桃園工作報告.txt','text/plain',{'language':'zh-TW'})
+    path='/api/library/'+doc['id']+'/original'
+    response=client.get(path)
+    assert response.status_code==200 and response.content==data
+    assert response.headers['content-disposition']=="attachment; filename*=UTF-8''"+quote('桃園工作報告.txt',safe='')
+    assert response.headers['cache-control']=='private, no-store'
+    assert documents.get(doc['id']).draft_revision==doc['draft_revision']
+    login(client,'reader')
+    assert client.get(path).status_code==404
+
+
 def test_admin_serves_login_application_and_library_requires_auth(client):
     response = client.get('/admin/')
     assert response.status_code == 200 and '/assets/' in response.text

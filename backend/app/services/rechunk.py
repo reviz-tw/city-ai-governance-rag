@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from app.services import store, documents, docling_pipeline, chunks
 from app.services.auth import require_editor
+from docling_worker.quality import OCR_POLICY
 
 
 def reviewed(db, doc):
@@ -43,12 +44,15 @@ def generate(document_id,checkpoint=None):
         if (current_proposal and current_proposal.original_hash==doc.original_hash and current_proposal.chunks==doc.draft
             and current_proposal.details.get('max_tokens')==settings.DOCLING_CHUNK_TOKENS
             and current_proposal.details.get('parser_version')=='2.134.0'
+            and (not expected_backend or current_proposal.details.get('ocr_policy')==OCR_POLICY)
             and current_proposal.details.get('pdf_backend')==expected_backend):
             return {'id':current_proposal.id,'status':'already-updated','chunks':len(doc.draft),'reused':True}
         existing=db.scalar(select(store.DoclingProposal).where(store.DoclingProposal.document_id==doc.id,
             store.DoclingProposal.original_hash==doc.original_hash,store.DoclingProposal.base_revision==doc.draft_revision,
-            store.DoclingProposal.status=='ready'))
-        if existing and existing.details.get('pdf_backend')==expected_backend:return {'id':existing.id,'status':'ready','chunks':len(existing.chunks),'reused':True}
+            store.DoclingProposal.status=='ready').order_by(store.DoclingProposal.created_at.desc()))
+        if (existing and existing.details.get('pdf_backend')==expected_backend
+            and (not expected_backend or existing.details.get('ocr_policy')==OCR_POLICY)):
+            return {'id':existing.id,'status':'ready','chunks':len(existing.chunks),'reused':True}
     data=store.get_bytes(doc.original_key)
     if hashlib.sha256(data).hexdigest()!=doc.original_hash:raise HTTPException(409,'Original file changed')
     filename=Path(doc.original_key).name
@@ -57,7 +61,8 @@ def generate(document_id,checkpoint=None):
         parsed=docling_pipeline.parse(data,filename,source_uri=uri)
     else:parsed=docling_pipeline.parse(data,filename)
     if checkpoint: checkpoint()
-    details={'pdf_backend':parsed.get('pdf_backend'),**{k:parsed[k] for k in ('parser_version','tokenizer','max_tokens','schema_version','warnings','source_reference_precision')}}
+    details={'pdf_backend':parsed.get('pdf_backend'),**{k:parsed[k] for k in ('parser_version','tokenizer','max_tokens','schema_version','warnings','source_reference_precision')},
+        **{k:parsed[k] for k in ('ocr_policy','ocr_audit') if k in parsed}}
     with store.session() as db:
         current=db.scalar(select(store.Document).where(store.Document.id==doc.id).with_for_update())
         if reviewed(db,current) or current.draft_revision!=doc.draft_revision or current.original_hash!=doc.original_hash:

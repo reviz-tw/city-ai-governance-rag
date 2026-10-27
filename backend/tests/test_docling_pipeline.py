@@ -13,7 +13,8 @@ def parser(monkeypatch):
         return dict(blocks=[block],chunks=[dict(id='dlc1',order=0,content='AI 治理\n'+block['text'],
             refs=[dict(block_id=block['id'],start=0,end=len(block['text']),page=1)],algorithm='docling-hybrid-v1')],
             warnings=[],original_hash=hashlib.sha256(data).hexdigest(),parser_version='2.134.0',tokenizer='cl100k_base',
-            max_tokens=768,pdf_backend='pypdfium2' if filename.endswith('.pdf') else None,schema_version=1,source_reference_precision='document-element')
+            max_tokens=768,pdf_backend='pypdfium2' if filename.endswith('.pdf') else None,schema_version=1,source_reference_precision='document-element',
+            ocr_policy='rapidocr-scan-fullpage-preserve-v1',ocr_audit=[])
     monkeypatch.setattr(docling_pipeline,'parse',parse)
     return parse
 
@@ -24,6 +25,37 @@ def test_upload_routes_through_docling(parser):
     assert value['draft'][0]['algorithm']=='docling-hybrid-v1'
     assert value['metadata']['docling']['parser_version']=='2.134.0'
     assert value['original_hash']==hashlib.sha256(b'synthetic original').hexdigest()
+
+
+def test_quality_warnings_survive_upload_and_candidate_application(parser,monkeypatch):
+    def uncertain(data,filename):
+        result=parser(data,filename)
+        result.update(warnings=['OCR_LOW_CONFIDENCE: pages 1'],
+            ocr_audit=[dict(page=1,low_confidence=1,unassembled=0,low_confidence_samples=[dict(text='需校對的文字',confidence=.2)])])
+        return result
+    monkeypatch.setattr(docling_pipeline,'parse',uncertain)
+    result=documents.create(b'synthetic','scan.pdf','application/pdf',{'language':'zh-TW'})
+    doc=documents.get(result['id'])
+    assert doc.extraction_warnings==['OCR_LOW_CONFIDENCE: pages 1']
+    assert doc.metadata_json['docling']['ocr_audit'][0]['low_confidence']==1
+    proposed=rechunk.generate(doc.id)
+    detail=rechunk.proposal_detail(doc.id,proposed['id'])
+    assert detail['details']['ocr_audit'][0]['low_confidence_samples'][0]['text']=='需校對的文字'
+    rechunk.apply(doc.id,proposed['id'],doc.draft_revision)
+    assert documents.get(doc.id).metadata_json['docling']['warnings']==['OCR_LOW_CONFIDENCE: pages 1']
+
+
+def test_old_ocr_policy_is_not_reused_but_new_policy_is(parser):
+    result=documents.create(b'synthetic','scan.pdf','application/pdf',{'language':'zh-TW'})
+    doc=documents.get(result['id'])
+    proposed=rechunk.generate(doc.id)
+    with store.session() as db:
+        candidate=db.get(store.DoclingProposal,proposed['id'])
+        candidate.details={k:v for k,v in candidate.details.items() if k!='ocr_policy'}
+        db.commit()
+    new=rechunk.generate(doc.id)
+    assert new['id']!=proposed['id'] and not new['reused']
+    assert rechunk.generate(doc.id)['id']==new['id']
 
 
 def test_apply_preserves_published_blocks_and_original(source,parser):

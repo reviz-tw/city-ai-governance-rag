@@ -167,6 +167,12 @@ def mutate(job_id, action, revision, draft=None):
                 db.get(store.Document,document.id).index_status='pending'
             job.status, job.error, job.result = 'queued', None, None
             job.payload={**job.payload,'retry_count':job.payload.get('retry_count',0)+1}
+            if job.kind=='pptx' and job.payload.get('slide_skill_version'):
+                previous=job.payload['slide_skill_version']
+                current=slide_authoring.version()
+                job.payload={**job.payload,'slide_skill_version':current,
+                    'previous_slide_skill_versions':job.payload.get('previous_slide_skill_versions',[])+[previous]}
+                job.draft=None
         elif action == 'confirm':
             if job.status != 'awaiting_review':
                 raise HTTPException(409, 'Wait for a draft before confirming')
@@ -535,6 +541,8 @@ def run(job_id):
                     active.result={'document_id':job.payload['document_id'],'status':'failed','reason':reason,'attempt':job.attempt}
                 if isinstance(exc, slide_authoring.SlideQualityError):
                     active.error = str(exc)
+                    if exc.issues:active.result={'layout_issues':exc.issues}
+                    if exc.draft:active.draft=exc.draft
                 active.revision += 1
                 close_publication(db, active, type(exc).__name__)
                 db.commit()

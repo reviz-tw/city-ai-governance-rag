@@ -1,5 +1,6 @@
 import time
 from pathlib import Path
+from urllib.parse import quote
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -54,7 +55,7 @@ def document(document_id: str):
 def original(document_id: str):
     doc = documents.get(document_id)
     return Response(store.get_bytes(doc.original_key), media_type=doc.mime,
-                    headers={'Content-Disposition':'attachment', 'Cache-Control':'private, no-store',
+                    headers={'Content-Disposition':"attachment; filename*=UTF-8''"+quote(Path(doc.original_key).name,safe=''), 'Cache-Control':'private, no-store',
                              'X-Content-Type-Options':'nosniff'})
 
 class SharingRequest(BaseModel):

@@ -1,11 +1,11 @@
 import {ChatMessage} from '../types';
 
 // Share the accepted marker syntax between source selection and visible links.
-export const CITATION_MARKER = /\[(?:citation:\s*)?\d+(?:\s*,\s*(?:citation:\s*)?\d+)*\]/gi;
+export const CITATION_MARKER = /\[(?:citation[_:]\s*)?\d+(?:\s*,\s*(?:citation[_:]\s*)?\d+)*\]/gi;
 
 export function citationIds(marker: string): number[] {
   if (!new RegExp(`^(?:${CITATION_MARKER.source})$`, 'i').test(marker)) return [];
-  return marker.slice(1, -1).replace(/citation:\s*/gi, '').split(',').map(value => Number(value.trim()));
+  return marker.slice(1, -1).replace(/citation[_:]\s*/gi, '').split(',').map(value => Number(value.trim()));
 }
 
 /** Every output is bound to the answer whose action the reader clicked. */

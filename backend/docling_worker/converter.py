@@ -7,18 +7,26 @@ import logging
 from importlib.metadata import version
 from pathlib import Path
 from functools import lru_cache
+try:
+    from .quality import OCR_POLICY, audit_ocr
+except ImportError:  # Converter is also launched directly in its isolated Python.
+    from quality import OCR_POLICY, audit_ocr
 
 
 @lru_cache(maxsize=1)
-def document_converter():
+def document_converter(full_page_ocr=False):
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
     from docling.datamodel.base_models import InputFormat
-    from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
+    from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions, OcrMode
     options=PdfPipelineOptions()
     options.do_ocr=True
     options.do_table_structure=True
-    options.ocr_options=RapidOcrOptions()
+    # RapidOCR otherwise silently drops entire recognized lines below 0.5.
+    # Preserve uncertain text for human review instead of hiding it.
+    options.ocr_options=RapidOcrOptions(text_score=0.0,
+        mode=OcrMode.FULL_PAGE if full_page_ocr else OcrMode.DEFAULT)
+    options.generate_parsed_pages=True
     if os.environ.get('DOCLING_ARTIFACTS_PATH'):
         options.artifacts_path=Path(os.environ['DOCLING_ARTIFACTS_PATH'])
     return DocumentConverter(format_options={InputFormat.PDF:PdfFormatOption(pipeline_options=options,backend=PyPdfiumDocumentBackend)})
@@ -35,20 +43,36 @@ def convert(path: Path, max_tokens=768):
     from docling_core.transforms.chunker.tokenizer.openai import OpenAITokenizer
     started=time.monotonic()
     digest=hashlib.sha256(path.read_bytes()).hexdigest()
+    full_page_ocr=False
     progress('source_loaded',source_hash=digest,bytes=path.stat().st_size,pdf_backend='pypdfium2' if path.suffix.lower()=='.pdf' else None)
     if path.suffix.lower()=='.pdf':
         import pypdfium2 as pdfium
         pdf=pdfium.PdfDocument(path)
-        try:progress('pdf_loaded',pages=len(pdf))
+        try:
+            native_text_pages=0
+            for index in range(len(pdf)):
+                page=pdf[index]
+                try:
+                    textpage=page.get_textpage()
+                    try:text=textpage.get_text_range()
+                    finally:textpage.close()
+                    if sum(c.isalnum() for c in text)>=30:native_text_pages+=1
+                finally:page.close()
+            # Scans must not be cropped to imperfect layout detections before OCR.
+            # Keep PDFium text extraction for PDFs with a usable native text layer.
+            full_page_ocr=native_text_pages==0
+            progress('pdf_loaded',pages=len(pdf),native_text_pages=native_text_pages,
+                     ocr_mode='full_page' if full_page_ocr else 'pdf_aware_layout_regions')
         finally:pdf.close()
     progress('conversion_started')
+    result=None
     if path.suffix.lower()=='.txt':
         from docling_core.types.doc import DoclingDocument, DocItemLabel
         document=DoclingDocument(name=path.stem)
         for paragraph in path.read_text(encoding='utf-8-sig').split('\n\n'):
             if paragraph.strip():document.add_text(label=DocItemLabel.PARAGRAPH,text=paragraph.strip())
     else:
-        result=document_converter().convert(path)
+        result=document_converter(full_page_ocr).convert(path)
         if result.status != ConversionStatus.SUCCESS:
             raise ValueError('Docling did not completely convert the document')
         document=result.document
@@ -56,16 +80,18 @@ def convert(path: Path, max_tokens=768):
     progress('chunking_started')
     tokenizer=OpenAITokenizer(tokenizer=tiktoken.get_encoding('cl100k_base'),max_tokens=max_tokens)
     chunker=HybridChunker(tokenizer=tokenizer,merge_peers=True,repeat_table_header=True)
-    blocks=[]; by_ref={}
+    blocks=[]; by_ref={}; page_text={}
     parser_version=version('docling')
     parser_identity=parser_version+(':pypdfium2' if path.suffix.lower()=='.pdf' else '')
     for item,_ in document.iterate_items():
         label=str(item.label.value)
-        if label in {'page_header','page_footer','picture'}: continue
         text=getattr(item,'text',None)
         if label=='table':text=item.export_to_markdown(doc=document)
         if not text or not text.strip():continue
         text=text.strip()
+        for provenance in item.prov:
+            page_text[provenance.page_no]=page_text.get(provenance.page_no,'')+'\n'+text
+        if label in {'page_header','page_footer','picture'}: continue
         provenance=[p.model_dump(mode='json') for p in item.prov]
         pages=list(dict.fromkeys(p.page_no for p in item.prov)) or [None]
         kind='table' if label=='table' else 'heading' if label in {'section_header','title'} else 'code' if label=='code' else 'paragraph'
@@ -100,8 +126,11 @@ def convert(path: Path, max_tokens=768):
             algorithm='docling-hybrid-v1',headings=headings,token_count=tokenizer.count_tokens(text)))
     if not values or not blocks:raise ValueError('Docling returned no source text')
     if sum(len(b['text']) for b in blocks)>1000000:raise ValueError('Document exceeds extraction limit')
+    audit,warnings=audit_ocr(result.pages,page_text) if result is not None else ([],[])
+    for page in audit:
+        progress('ocr_quality',**{k:page[k] for k in ('page','cells','low_confidence','unassembled')})
     progress('chunking_completed',chunks=len(values),blocks=len(blocks),elapsed_seconds=round(time.monotonic()-started,2))
-    return dict(blocks=blocks,chunks=values,warnings=[],original_hash=digest,
+    return dict(blocks=blocks,chunks=values,warnings=warnings,ocr_policy=OCR_POLICY,ocr_audit=audit,original_hash=digest,
         parser_version=parser_version,pdf_backend='pypdfium2' if path.suffix.lower()=='.pdf' else None,tokenizer='cl100k_base',max_tokens=max_tokens,
         source_reference_precision='document-element',schema_version=1)
 

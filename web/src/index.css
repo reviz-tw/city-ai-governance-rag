@@ -195,6 +195,7 @@
 .source-block { border-top: 1px solid var(--color-divider); padding: 18px 0; }
 .source-block > strong { font-size: 16px; }
 .source-block > p { margin: 6px 0 10px; }
+.source-passage { white-space: pre-line; overflow-wrap: anywhere; min-width: 0; }
 .error-message, .app-alert, .panel-body [role=alert], .login-card [role=alert] { padding: 12px 16px; color: #9b293d; background: #fff3f4; border: 1px solid #f0d0d6; border-radius: 10px; font: 13px/1.7 var(--font-ui); overflow-wrap: anywhere; }
 .sources-panel .panel-body { padding: 0; }
 .scope-panel .panel-body { padding: 0; }

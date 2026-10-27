@@ -34,15 +34,15 @@ def source_languages(values: list[str] | None) -> list[str]:
 def detect(text: str) -> str | None:
     text = re.sub(r"https?://\S+|`[^`]*`", " ", text)[:4000]
     letters = [c for c in text if c.isalpha()]
-    if len(letters) < 8:
-        return None
     # Mixed CJK questions containing a single English acronym remain CJK.
     kana = len(re.findall(r"[\u3040-\u30ff]", text))
     han = len(re.findall(r"[\u3400-\u9fff]", text))
     if kana >= 2 and (kana + han) / len(letters) > 0.4:
         return "ja"
-    if han >= 6 and han / len(letters) > 0.45 and not kana:
+    if han >= 2 and han / max(1, len(letters)) > 0.45 and not kana:
         return "zh-TW"
+    if len(letters) < 8:
+        return None
     if not han and not kana and len(re.findall(r'[^\W\d_]+', text, flags=re.UNICODE)) < 3:
         return None
     try:

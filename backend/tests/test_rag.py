@@ -48,7 +48,7 @@ def test_stream_failure_does_not_retry_or_report_success(retrieved,monkeypatch):
     mocked=Mock(side_effect=failing)
     monkeypatch.setattr(gemini,'stream',mocked)
     events=[json.loads(e.removeprefix('data: ')) for e in rag.stream_city_governance_rag_vertex('What is the governance policy?')]
-    assert [e['type'] for e in events]==['sources','chunk','error','done']
+    assert [e['type'] for e in events]==['status','sources','status','chunk','error','done']
     assert events[-1]['status']=='failed' and events[-2]['partial']
     assert mocked.call_count==1
     assert 'private provider' not in str(events)
@@ -81,6 +81,25 @@ def test_context_rewrite_and_bounded_history(monkeypatch):
     assert '風險管理' in result['retrieval_query']
     assert len(call.call_args.args[0].encode()) < 10000
     assert prepare('New question',None)['history']==[]
+
+
+def test_standalone_question_skips_rewrite_but_followup_does_not(monkeypatch):
+    call=Mock(return_value=json.dumps({'retrieval_query':'Taipei AI policy','summary':'','city':'Taipei'}))
+    monkeypatch.setattr(gemini,'generate',call)
+    context=ResearchContext(history=[HistoryMessage(id='u',role='user',content='Previous topic')],persisted=True)
+    question='What are the requirements for artificial intelligence transparency?'
+    assert prepare(question,context)['retrieval_query']==question
+    call.assert_not_called()
+    prepare('What are the AI requirements for that city?',context)
+    call.assert_called_once()
+
+
+def test_search_failure_is_not_reported_as_empty_results(monkeypatch):
+    monkeypatch.setattr(rag,'retrieve',Mock(side_effect=rag.SearchUnavailable('private')))
+    events=[json.loads(e.removeprefix('data: ')) for e in rag.stream_city_governance_rag_vertex('What is the AI policy?')]
+    assert [e['type'] for e in events]==['status','error','done']
+    assert 'search service' in events[1]['message'].lower()
+    assert events[-1]['status']=='failed' and 'private' not in str(events)
 
 
 def test_managed_citations_keep_original_passage_ids(retrieved):

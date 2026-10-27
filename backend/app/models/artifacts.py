@@ -71,7 +71,7 @@ class Slide(BaseModel):
     quote: str = Field('', max_length=320, description='REQUIRED and nonempty for evidence layout: a verbatim quotation in the original source language. Otherwise empty.')
     chart: ChartSpec | None = None
     citations: list[CitationRef] = Field(min_length=1, max_length=6)
-    notes: str = Field(min_length=1, max_length=1800, description='Presenter explanation; preserve qualifications and distinguish proposals from source facts.')
+    notes: str = Field(min_length=1, max_length=6000, description='Presenter explanation; preserve qualifications and distinguish proposals from source facts.')
 
     @model_validator(mode='after')
     def layout_content(self):

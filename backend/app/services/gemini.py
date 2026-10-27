@@ -53,11 +53,13 @@ def generation_config(system_instruction: str, schema=None):
     return types.GenerateContentConfig(**config)
 
 
-def generate(contents: str, system: str, schema=None, *, cleaner=False):
+def generate(contents: str, system: str, schema=None, *, cleaner=False, max_output_tokens=None):
+    config=generation_config(system, schema)
+    if max_output_tokens is not None:config.max_output_tokens=max_output_tokens
     with client() as api:
         response = api.models.generate_content(
             model=settings.GEMINI_CLEANER_MODEL if cleaner else settings.GEMINI_CHAT_MODEL,
-            contents=contents, config=generation_config(system, schema))
+            contents=contents, config=config)
         if not response.text:
             raise ValueError("The model returned no text")
         return response.text
