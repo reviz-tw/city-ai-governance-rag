@@ -1,0 +1,12 @@
+# Keep the running backend and its dependencies while replacing the web bundle.
+# BASE_IMAGE must be the currently deployed image pinned by digest.
+ARG BASE_IMAGE
+FROM node:20-alpine AS web-builder
+WORKDIR /build/web
+COPY web/package*.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm test && npm run build
+
+FROM ${BASE_IMAGE}
+COPY --from=web-builder /build/web/dist /app/app/web_dist

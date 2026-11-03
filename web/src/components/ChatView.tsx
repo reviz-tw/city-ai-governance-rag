@@ -13,7 +13,7 @@ import {shouldFollowAnswer} from '../lib/answer-reveal';
 
 interface ChatViewProps {
   t: UIStrings; lang: InterfaceLanguage; messages: ChatMessage[]; loading: boolean;
-  onSendMessage: (text: string) => void; onClearHistory: () => void; onOpenSource: (citation:Citation, language:string) => void; onArtifact: (kind:string,message:ChatMessage)=>void;
+  onSendMessage: (text: string, detail?: 'progressive'|'brief'|'detailed') => void; onClearHistory: () => void; onOpenSource: (citation:Citation, language:string) => void; onArtifact: (kind:string,message:ChatMessage)=>void;
 }
 
 export function ChatView({t, lang, messages, loading, onSendMessage, onClearHistory, onOpenSource, onArtifact}: ChatViewProps) {
@@ -133,7 +133,8 @@ export function ChatView({t, lang, messages, loading, onSendMessage, onClearHist
             <AnswerContent key={`${message.id}:${message.detailedStart ?? 'preview'}`} content={message.content}
               start={message.detailedStart} animate={message.id === latestAnswer?.id && !message.error}
               language={message.response_language} render={content => formatted({...message, content})}/>
-            {message.error && <p role="alert" className="error-message">{message.error}</p>}
+            {!!message.pendingSourceCount && <p role="status" className="error-message">{text('sourcesPreparing')}</p>}
+            {message.error && <p role="alert" className="error-message">{message.errorKey ? text(message.errorKey) : message.status && message.status !== 'completed' ? text('answerIncomplete') : message.error}</p>}
             {message.isStreaming && !message.error && message.content && message.stage === 'expanding' && <div className="search-status full-answer-status" role="status" aria-atomic="true"><span className="loading-dots" aria-hidden="true"><i/><i/><i/></span><span>{text('preparingFullAnswer')}</span></div>}
             {message.isStreaming && !message.error && message.content && message.stage === 'generating' && <span className="streaming-mark" role="status" aria-label={t.searchingText}/>}
             {!message.isStreaming && <footer className="answer-footer">

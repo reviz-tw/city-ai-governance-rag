@@ -1,11 +1,14 @@
 """Check the candidate and promote the exact build revision on the existing service."""
 import json
+import hashlib
+from pathlib import Path
 import subprocess
 import sys
 import urllib.request
 import urllib.error
 
-service, region, project, revision, expected_url = sys.argv[1:]
+service, region, project, revision, expected_url = sys.argv[1:6]
+expected_web = Path(sys.argv[6]) if len(sys.argv) > 6 else None
 
 
 def describe():
@@ -19,6 +22,25 @@ def check_identity(state):
         raise SystemExit('Service URL changed; refusing promotion')
     if state['status']['latestCreatedRevisionName'] != revision:
         raise SystemExit('A newer deployment exists; refusing to promote an older build')
+
+
+def check_web(url):
+    if expected_web is None:
+        return
+    # Compare bytes from the candidate with the exact tested image, including
+    # its entry HTML and all assets, before it can receive production traffic.
+    for file in sorted(expected_web.rglob('*')):
+        if not file.is_file():
+            continue
+        path = '/' + file.relative_to(expected_web).as_posix()
+        with urllib.request.urlopen(url + path, timeout=60) as response:
+            actual = response.read()
+        if hashlib.sha256(actual).digest() != hashlib.sha256(file.read_bytes()).digest():
+            raise SystemExit('Deployed web asset differs from the tested image: ' + path)
+    for path in ['/', '/admin/']:
+        with urllib.request.urlopen(url + path, timeout=60) as response:
+            if response.read() != (expected_web / 'index.html').read_bytes():
+                raise SystemExit('Deployed HTML differs from the tested image: ' + path)
 
 
 state = describe()
@@ -39,6 +61,7 @@ except urllib.error.HTTPError as error:
         raise
 else:
     raise SystemExit('Document library must require authentication')
+check_web(candidate)
 check_identity(describe())
 subprocess.run(['gcloud', 'run', 'services', 'update-traffic', service, '--region', region,
                 '--project', project, '--to-revisions', revision + '=100', '--quiet'], check=True)
@@ -46,4 +69,5 @@ state = describe()
 check_identity(state)
 if not any(t.get('revisionName') == revision and t.get('percent') == 100 for t in state['status']['traffic']):
     raise SystemExit('The verified revision is not serving all traffic')
+check_web(expected_url)
 print('Verified deployment on the unchanged service URL: ' + expected_url)

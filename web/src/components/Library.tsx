@@ -11,7 +11,7 @@ import {ExtractionWarnings} from './ExtractionWarnings';
 function LibraryFrame({standalone, editing, onClose, children}: {standalone:boolean; editing:boolean; onClose:()=>void; children:ReactNode}) {
   const {t} = useLocale();
   if (!standalone) return <WorkspacePanel title={t('library')} className={editing?'chunk-editor-panel':''} onClose={onClose}>{children}</WorkspacePanel>;
-  return <main className={`admin-library ${editing?'is-editing':''}`}><header className="admin-library-header"><div>{!editing&&<p className="eyebrow">City AI governance · Admin</p>}<h1>{t('adminTitle')}</h1></div><nav><a href="/">{t('returnResearch')}</a><a href="/admin/tools/">{t('aiTools')}</a></nav></header>{children}</main>;
+  return <main className={`admin-library ${editing?'is-editing':''}`}><header className="admin-library-header"><div>{!editing&&<p className="eyebrow">{t('adminEyebrow')}</p>}<h1>{t('adminTitle')}</h1></div><nav><a href="/">{t('returnResearch')}</a><a href="/admin/tools/">{t('aiTools')}</a></nav></header>{children}</main>;
 }
 
 function DocumentActivity({document}: {document:any}) {

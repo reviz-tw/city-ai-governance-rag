@@ -24,6 +24,10 @@ export interface ChatMessage {
   detailedStart?: number;
   response_language?: string;
   error?: string;
+  errorKey?: import('./lib/panel-copy').PanelKey;
+  status?: string;
   stage?: 'searching' | 'generating' | 'expanding';
   sourceCount?: number;
+  answer_detail?: 'progressive'|'brief'|'detailed';
+  pendingSourceCount?: number;
 }

@@ -1,10 +1,11 @@
 import {useLocale} from '../lib/locale';
+import {extractionWarningText} from '../lib/panel-copy';
 
 export function ExtractionWarnings({warnings=[],audit=[]}:{warnings?:string[];audit?:any[]}) {
-  const {t}=useLocale();
+  const {t,lang}=useLocale();
   if(!warnings.length&&!audit.some(p=>p.low_confidence||p.unassembled))return null;
   return <details className="extraction-warnings"><summary>{t('extractionWarnings')}</summary>
-    {warnings.length>0&&<ul>{[...new Set(warnings)].map(w=><li key={w}>{w}</li>)}</ul>}
+    {warnings.length>0&&<ul>{[...new Set(warnings)].map(w=><li key={w}>{extractionWarningText(lang,w)}</li>)}</ul>}
     {audit.filter(p=>p.low_confidence||p.unassembled).map(p=><div key={p.page}>
       <p>{t('ocrPageReview',{page:p.page,low:p.low_confidence,missing:p.unassembled})}</p>
       {(['low_confidence_samples','unassembled_samples'] as const).map(key=>p[key]?.length>0&&<details key={key}>

@@ -5,9 +5,12 @@
 !infra/
 infra/*
 !infra/cloudbuild.yaml
+!infra/cloudbuild.web.yaml
+!infra/Dockerfile.web
 !infra/cloudbuild.docling.yaml
 !infra/env.dev.yaml
 !infra/verify_deployment.py
+!infra/configure_legacy_catalog.py
 !backend/
 backend/*
 !backend/requirements.txt

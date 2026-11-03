@@ -1,0 +1,62 @@
+# Frontend-only deployment; supply the running backend digest and revision.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: build-web
+    args:
+      - build
+      - -f
+      - infra/Dockerfile.web
+      - '--build-arg=BASE_IMAGE=${_BASE_IMAGE}'
+      - -t
+      - '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:web-${BUILD_ID}'
+      - .
+  - name: gcr.io/cloud-builders/docker
+    id: extract-web
+    entrypoint: sh
+    args:
+      - -ceu
+      - |
+        container_id=$$(docker create '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:web-${BUILD_ID}')
+        docker cp "$$container_id:/app/app/web_dist" expected-web
+        docker rm "$$container_id"
+  - name: gcr.io/cloud-builders/docker
+    id: push-web
+    args: [push, '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:web-${BUILD_ID}']
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-web
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        actual=$$(gcloud run services describe '${_SERVICE_NAME}' --region='${_LOCATION}' --project='$PROJECT_ID' --format='value(status.latestReadyRevisionName)')
+        if [ "$$actual" != '${_BASE_REVISION}' ]; then
+          echo 'The service changed during the build; refusing to replace a newer deployment.' >&2
+          exit 1
+        fi
+        gcloud run deploy '${_SERVICE_NAME}' \
+          --image='${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:web-${BUILD_ID}' \
+          --region='${_LOCATION}' --project='$PROJECT_ID' \
+          --no-traffic --tag=candidate --revision-suffix='web-${BUILD_ID}' --quiet
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: verify-and-promote-web
+    entrypoint: python3
+    args:
+      - infra/verify_deployment.py
+      - '${_SERVICE_NAME}'
+      - '${_LOCATION}'
+      - '$PROJECT_ID'
+      - '${_SERVICE_NAME}-web-${BUILD_ID}'
+      - '${_SERVICE_URL}'
+      - expected-web
+images:
+  - '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:web-${BUILD_ID}'
+substitutions:
+  _BASE_IMAGE: ''
+  _BASE_REVISION: ''
+  _LOCATION: asia-east1
+  _REPO_NAME: haystack-dev
+  _SERVICE_NAME: city-rag-backend-dev
+  _SERVICE_URL: https://city-rag-backend-dev-wvswpuk2tq-de.a.run.app
+options:
+  logging: CLOUD_LOGGING_ONLY
+  dynamicSubstitutions: true
