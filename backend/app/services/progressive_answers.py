@@ -2,8 +2,9 @@
 import logging
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
+from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
+from queue import Queue, Empty, Full
 from app.core.config import settings
 from app.services import gemini, rag_timing
 
@@ -25,36 +26,74 @@ COPY = {
 }
 
 
-def _full_answer(contents, system, config):
-    with rag_timing.phase('detailed'), rag_timing.span('model_generation'):
-        answer = gemini.generate(contents, system, **config)
-        if not answer or not answer.strip():
-            raise ValueError('No full answer generated')
-        return answer
+class FullAnswerStream:
+    def __init__(self):
+        self.fragments = Queue(maxsize=64)
+        self.stopped = threading.Event()
+        self.future = None
+
+    def cancel(self):
+        self.stopped.set()
+        if self.future is not None:
+            self.future.cancel()
+
+    def put(self, fragment):
+        while not self.stopped.is_set():
+            try:
+                self.fragments.put(fragment, timeout=0.1)
+                return
+            except Full:
+                continue
+
+
+def _full_answer(contents, system, config, stream):
+    with rag_timing.phase('detailed'):
+        emitted = False
+        iterator = iter(gemini.stream(contents, system, **config))
+        try:
+            while not stream.stopped.is_set():
+                try:
+                    fragment = next(iterator)
+                except StopIteration:
+                    break
+                if not fragment:
+                    continue
+                emitted = emitted or bool(fragment.strip())
+                stream.put(fragment)
+            if not emitted and not stream.stopped.is_set():
+                raise ValueError('No full answer generated')
+        finally:
+            try:
+                if hasattr(iterator, 'close'):
+                    iterator.close()
+            finally:
+                stream.put(None)  # Wake the consumer on completion or failure.
 
 
 def _submit(contents, system, config):
     slots = _full_slots
     if not slots.acquire(blocking=False):
         return None
+    stream = FullAnswerStream()
     try:
-        future = _full_pool.submit(copy_context().run, _full_answer, contents, system, config)
+        future = _full_pool.submit(copy_context().run, _full_answer, contents, system, config, stream)
     except BaseException:
         slots.release()
         raise
     future.add_done_callback(lambda _: slots.release())
-    return future
+    stream.future = future
+    return stream
 
 
 def events(contents, base_system, language, brief_style, detailed_style, brief_config, detailed_config):
-    """Start the full answer immediately; publish it only after it is complete.
+    """Start both generations together; stream full-answer fragments after the preview.
 
     Neither generation consumes the other's text as evidence. Headers and both
     bodies use ordinary chunk events, so persistence/export keep one answer.
     """
     short_title, full_title, preview_warning = COPY[language]
     deadline = time.monotonic() + settings.GEMINI_TIMEOUT_MS / 1000
-    future = _submit(contents, base_system + detailed_style, detailed_config)
+    full = _submit(contents, base_system + detailed_style, detailed_config)
     try:
         started = time.monotonic()
         emitted = False
@@ -89,24 +128,39 @@ def events(contents, base_system, language, brief_style, detailed_style, brief_c
                     preview.close()
             rag_timing.record_since('brief_complete', started)
         yield dict(type='status', stage='expanding')
-        if future is None:
+        if full is None:
             raise RuntimeError('Full-answer generation capacity unavailable')
+        detailed_started = False
         with rag_timing.span('detailed_wait_after_preview'):
             while True:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise TimeoutError('Full answer exceeded the request deadline')
                 try:
-                    answer = future.result(timeout=min(2, remaining))
+                    fragment = full.fragments.get_nowait()
+                except Empty:
+                    if full.future.done():
+                        # Recheck after completion: the worker may have queued its
+                        # final fragment between the empty check and done().
+                        if not full.fragments.empty():
+                            continue
+                        full.future.result()  # Propagate failure after preserving queued text.
+                        break
+                    try:
+                        fragment = full.fragments.get(timeout=min(2, remaining))
+                    except Empty:
+                        yield dict(type='heartbeat')
+                        continue
+                if fragment is None:
+                    full.future.result()
                     break
-                except FutureTimeout:
-                    if future.done():
-                        raise
-                    # Keeps the SSE connection and durable conversation lease alive.
-                    yield dict(type='heartbeat')
-        yield dict(type='chunk', text=f'\n\n## {full_title}\n\n' + answer, phase='detailed')
+                if not detailed_started:
+                    rag_timing.record_since('detailed_first_text', started)
+                text = fragment if detailed_started else f'\n\n## {full_title}\n\n' + fragment
+                detailed_started = True
+                yield dict(type='chunk', text=text, phase='detailed')
     finally:
-        if future is not None:
+        if full is not None:
             # An already running HTTP call finishes under its provider timeout;
             # the shared pool and admission bound cap orphaned work.
-            future.cancel()
+            full.cancel()

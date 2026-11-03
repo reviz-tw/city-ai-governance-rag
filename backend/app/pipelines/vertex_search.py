@@ -358,7 +358,7 @@ def prepare_rag(query, city_filter=None, response_language='auto', interface_lan
     budget = settings.CONTEXT_EVIDENCE_TOKENS
     for res in results:
         snippet = ' '.join(s.get('snippet', '') for s in res.get('snippets', []) if isinstance(s, Mapping))
-        snippet = plain_search_text(snippet)
+        snippet = plain_search_text(snippet).strip()
         if not snippet or snippet in seen:
             continue
         seen.add(snippet)
@@ -398,7 +398,7 @@ def prepare_rag(query, city_filter=None, response_language='auto', interface_lan
     if style_reserve + len((system+contents).encode('utf-8')) > settings.CONTEXT_INPUT_TOKENS:
         raise ValueError('Context exceeds configured input budget')
     metadata = dict(response_language=language.language, language_source=language.source,
-                    model_used=settings.GEMINI_CHAT_MODEL, context_summary=context['summary'],
+                    model_used=settings.GEMINI_CHAT_MODEL if sources else '', context_summary=context['summary'],
                     context_city=context['city'], answer_detail=answer_detail,
                     request_id=rag_timing.current().request_id if rag_timing.current() else None)
     rag_timing.record_since('evidence_prompt', evidence_started, source_count=len(sources))
@@ -438,6 +438,18 @@ ERROR_MESSAGES = {
  'ru': 'Не удалось создать ответ. Повторите попытку. Источники доступны для просмотра.',
  'ko': '답변 생성에 실패했습니다. 다시 시도해 주세요.',
  'de': 'Die Antwort konnte nicht erstellt werden. Bitte erneut versuchen.'}
+
+NO_RESULTS_MESSAGES = {
+ 'zh-TW':'目前沒有找到與問題相關、可供引用的資料。請嘗試調整關鍵字，或放寬城市與來源語言的篩選條件。',
+ 'zh-CN':'目前没有找到与问题相关、可供引用的资料。请尝试调整关键词，或放宽城市与来源语言的筛选条件。',
+ 'en':'No relevant sources available for citation were found for your question. Try different keywords or broader city and source-language filters.',
+ 'ja':'ご質問に関連する引用可能な資料が見つかりませんでした。キーワードを変更するか、都市や資料の言語の絞り込み条件を広げてください。',
+ 'fr':'Aucune source pertinente pouvant être citée n’a été trouvée pour votre question. Essayez d’autres mots-clés ou élargissez les filtres de ville et de langue des sources.',
+ 'es':'No se encontraron fuentes pertinentes que se puedan citar para tu pregunta. Prueba otras palabras clave o amplía los filtros de ciudad e idioma de las fuentes.',
+ 'ru':'По вашему вопросу не найдено подходящих источников для цитирования. Попробуйте другие ключевые слова или расширьте фильтры города и языка источников.',
+ 'ko':'질문과 관련하여 인용할 수 있는 자료를 찾지 못했습니다. 검색어를 바꾸거나 도시 및 자료 언어 필터를 넓혀 보세요.',
+ 'de':'Zu Ihrer Frage wurden keine relevanten zitierfähigen Quellen gefunden. Versuchen Sie andere Suchbegriffe oder erweitern Sie die Filter für Stadt und Quellensprache.'}
+
 
 SEARCH_ERRORS = {
  'zh-TW':'搜尋服務暫時無法使用，請稍後重試。', 'zh-CN':'搜索服务暂时无法使用，请稍后重试。',
@@ -484,6 +496,9 @@ def query_city_governance_rag_vertex(query, city_filter=None, response_language=
                     **({'error':failure} if failure else {}), **metadata)
     system, contents, sources, metadata = prepare_rag(
         query, city_filter, response_language, interface_language, source_languages, research_context, answer_detail)
+    if not sources:
+        return dict(query=query, answer=NO_RESULTS_MESSAGES[metadata['response_language']],
+                    sources=[], search_results_count=0, status='completed', **metadata)
     status = 'completed'
     try:
         with rag_timing.span('model_generation'):
@@ -519,6 +534,10 @@ def stream_city_governance_rag_vertex(query, city_filter=None, response_language
         return
     logger.info('rag_preparation_ms=%s sources=%s',int((time.monotonic()-request_started)*1000),len(sources))
     yield event(dict(type='sources', sources=sources, **metadata))
+    if not sources:
+        yield event(dict(type='chunk', text=NO_RESULTS_MESSAGES[metadata['response_language']]))
+        yield event(dict(type='done', status='completed'))
+        return
     yield event(dict(type='status',stage='generating',source_count=len(sources)))
     emitted = False
     model_started=time.monotonic()

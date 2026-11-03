@@ -1,18 +1,20 @@
-import {ReactNode, useEffect, useMemo, useState} from 'react';
-import {answerRevealOffsets} from '../lib/answer-reveal';
+import {ReactNode, useEffect, useMemo, useRef, useState} from 'react';
+import {advanceAnswerReveal, answerRevealOffsets} from '../lib/answer-reveal';
 import {useLocale} from '../lib/locale';
 
 /** Animate presentation only; copying, exports and persistence use the full answer. */
-export function AnswerContent({content, start, animate, language, render}: {
-  content: string; start?: number; animate: boolean; language?: string;
+export function AnswerContent({content, start, animate, streaming = false, language, render}: {
+  content: string; start?: number; animate: boolean; streaming?: boolean; language?: string;
   render: (content: string) => ReactNode;
 }) {
   const {t} = useLocale();
   const [skipped, setSkipped] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(() =>
     typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-  const offsets = useMemo(() => start === undefined ? [content.length] : answerRevealOffsets(content, start), [content, start]);
+  const offsets = useMemo(() => start === undefined ? [content.length] : answerRevealOffsets(content, start, streaming), [content, start, streaming]);
   const [visibleEnd, setVisibleEnd] = useState(offsets[0]);
+  const position = useRef(offsets[0]);
+  const lastFrame = useRef(0);
   const enabled = animate && start !== undefined && !skipped && !reducedMotion;
   const revealing = enabled && visibleEnd < content.length;
 
@@ -25,26 +27,24 @@ export function AnswerContent({content, start, animate, language, render}: {
 
   useEffect(() => {
     if (!enabled) return;
-    const started = performance.now();
-    const duration = Math.min(5000, Math.max(500, offsets.length * 2));
     let frame: number;
-    let previous = -Infinity;
+    if (!lastFrame.current) lastFrame.current = performance.now();
     const tick = (now: number) => {
-      const progress = Math.min(1, (now - started) / duration);
-      if (now - previous >= 32 || progress === 1) {
-        setVisibleEnd(offsets[Math.floor(progress * (offsets.length - 1))]);
-        previous = now;
+      if (now - lastFrame.current >= 32) {
+        position.current = advanceAnswerReveal(offsets, position.current, Math.min(64, now - lastFrame.current));
+        setVisibleEnd(position.current);
+        lastFrame.current = now;
       }
-      if (progress < 1) frame = requestAnimationFrame(tick);
+      if (position.current < offsets[offsets.length - 1]) frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [enabled, offsets]);
 
   return <>
-    <div className="answer-content" dir="auto" lang={language} aria-busy={revealing}>
+    <div className="answer-content" dir="auto" lang={language} aria-busy={streaming || revealing}>
       {render(enabled ? content.slice(0, visibleEnd) : content)}
-      {revealing && <span className="streaming-mark" aria-hidden="true"/>}
+      {(revealing || (streaming && start !== undefined)) && <span className="streaming-mark" aria-hidden="true"/>}
     </div>
     {revealing && <button className="btn btn-ghost reveal-answer" onClick={() => setSkipped(true)}>{t('showFullAnswer')}</button>}
   </>;

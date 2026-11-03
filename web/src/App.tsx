@@ -99,7 +99,7 @@ export default function App() {
           update({citations:event.sources, response_language:event.response_language, answer_detail:event.answer_detail, pendingSourceCount:event.pending_source_count});
         } else if (event.type === 'chunk') {
           if(event.phase === 'detailed') {
-            detailedReadyAt = performance.now() - started;
+            detailedReadyAt ??= performance.now() - started;
             detailedStart ??= content.length;
           }
           lastTextAt = performance.now() - started;

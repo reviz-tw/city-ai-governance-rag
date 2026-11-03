@@ -32,9 +32,10 @@ class Settings(BaseSettings):
     RAG_DETAILED_THINKING_LEVEL: Literal['LOW', 'MEDIUM', 'HIGH'] = 'MEDIUM'
     RAG_PREVIEW_TIMEOUT_MS: int = Field(8000, ge=1000, le=30000)
     GEMINI_TIMEOUT_MS: int = 120000
-    CONTEXT_INPUT_TOKENS: int = 16000
+    # Legacy names: these budgets are measured in UTF-8 bytes, not model tokens.
+    CONTEXT_INPUT_TOKENS: int = 36000
     CONTEXT_HISTORY_TOKENS: int = 3000
-    CONTEXT_EVIDENCE_TOKENS: int = 9000
+    CONTEXT_EVIDENCE_TOKENS: int = 24000
     GOOGLE_OAUTH_CLIENT_ID: str = ""
     LOGIN_ALLOWED_EMAILS: list[str] = []
     AUTH_SESSION_SECRET: str = Field("", repr=False)

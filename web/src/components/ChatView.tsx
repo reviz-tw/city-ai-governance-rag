@@ -132,6 +132,7 @@ export function ChatView({t, lang, messages, loading, onSendMessage, onClearHist
             {message.isStreaming && !message.content && <div className="search-status" role="status"><span className="loading-dots"><i/><i/><i/></span><span>{message.stage === 'generating' ? statusCopy[lang][message.sourceCount ? 1 : 2] : statusCopy[lang][0]}</span></div>}
             <AnswerContent key={`${message.id}:${message.detailedStart ?? 'preview'}`} content={message.content}
               start={message.detailedStart} animate={message.id === latestAnswer?.id && !message.error}
+              streaming={!!message.isStreaming && !message.error}
               language={message.response_language} render={content => formatted({...message, content})}/>
             {!!message.pendingSourceCount && <p role="status" className="error-message">{text('sourcesPreparing')}</p>}
             {message.error && <p role="alert" className="error-message">{message.errorKey ? text(message.errorKey) : message.status && message.status !== 'completed' ? text('answerIncomplete') : message.error}</p>}

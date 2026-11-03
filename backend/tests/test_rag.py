@@ -54,14 +54,28 @@ def test_stream_failure_does_not_retry_or_report_success(retrieved,monkeypatch):
     assert 'private provider' not in str(events)
 
 
-def test_no_evidence_prompt_forbids_invented_facts(monkeypatch):
-    monkeypatch.setattr(rag,'retrieve',lambda *a:[])
-    generate=Mock(return_value='No evidence available.')
+@pytest.mark.parametrize('detail',['brief','detailed','progressive'])
+@pytest.mark.parametrize('language',list(rag.NO_RESULTS_MESSAGES))
+def test_empty_results_return_localized_message_without_generation(monkeypatch,detail,language):
+    from app.services import chunks
+    monkeypatch.setattr(chunks,'search',lambda *a:[])
+    monkeypatch.setattr(rag,'search_vertex_data_store',lambda *a,**kw:[])
+    generate=Mock(side_effect=AssertionError('No answer generation without evidence'))
+    stream=Mock(side_effect=AssertionError('No answer generation without evidence'))
     monkeypatch.setattr(gemini,'generate',generate)
-    result=rag.query_city_governance_rag_vertex('What policy is supported?',answer_detail='detailed')
+    monkeypatch.setattr(gemini,'stream',stream)
+    kwargs=dict(response_language=language,answer_detail=detail)
+    result=rag.query_city_governance_rag_vertex('What policy is supported?',**kwargs)
     assert result['sources']==[]
-    assert 'never invent' in generate.call_args.args[1]
-    assert '22' not in result['answer']
+    assert result['answer']==rag.NO_RESULTS_MESSAGES[language]
+    assert result['status']=='completed' and 'error' not in result
+    assert result['search_results_count']==0 and result['model_used']==''
+    events=[json.loads(e.removeprefix('data: ')) for e in rag.stream_city_governance_rag_vertex('What policy is supported?',**kwargs)]
+    assert [e['type'] for e in events]==['status','sources','chunk','done']
+    assert events[2]['text']==result['answer']
+    assert events[-1]['status']=='completed'
+    generate.assert_not_called()
+    stream.assert_not_called()
 
 
 def test_cleaner_uses_shared_sdk_and_validated_json(monkeypatch):
@@ -94,8 +108,12 @@ def test_standalone_question_skips_rewrite_but_followup_does_not(monkeypatch):
     call.assert_called_once()
 
 
-def test_search_failure_is_not_reported_as_empty_results(monkeypatch):
-    monkeypatch.setattr(rag,'retrieve',Mock(side_effect=rag.SearchUnavailable('private')))
+@pytest.mark.parametrize('failed_store',['managed','legacy'])
+def test_search_failure_is_not_reported_as_empty_results(monkeypatch,failed_store):
+    from app.services import chunks
+    failure=Mock(side_effect=RuntimeError('private'))
+    monkeypatch.setattr(chunks,'search',failure if failed_store=='managed' else Mock(return_value=[]))
+    monkeypatch.setattr(rag,'search_vertex_data_store',failure if failed_store=='legacy' else Mock(return_value=[]))
     events=[json.loads(e.removeprefix('data: ')) for e in rag.stream_city_governance_rag_vertex('What is the AI policy?')]
     assert [e['type'] for e in events]==['status','error','done']
     assert 'search service' in events[1]['message'].lower()
@@ -109,8 +127,27 @@ def test_managed_citations_keep_original_passage_ids(retrieved):
     assert sources[0]['block_ids']==['p4','p5']
 
 
+def test_expanded_evidence_includes_more_documents_within_byte_budgets(monkeypatch):
+    monkeypatch.setattr(rag,'retrieve',lambda *a:[dict(id=str(i),title=f'Policy {i}',
+        snippets=[{'snippet':f'{i}: '+('治理證據'*1000)}],metadata={}) for i in range(12)])
+    system,contents,sources,_=rag.prepare_rag('What is the AI governance policy?')
+    assert len(sources)==7  # Previously only three long passages fit in 9,000 bytes.
+    assert sum(len(s['snippet'].encode('utf-8')) for s in sources)<=24000
+    assert all(len(s['snippet'].encode('utf-8'))<=3500 for s in sources)
+    assert len((system+contents).encode('utf-8'))<=36000
+    assert [s['citation_id'] for s in sources]==list(range(1,len(sources)+1))
+
+
 def test_search_markup_is_removed_from_citations_and_model_evidence(retrieved):
     retrieved.return_value[0]['snippets']=[{'snippet':'Review <b>AI</b> use &amp; human oversight.'}]
     _,content,sources,_=rag.prepare_rag('What is the policy?')
     assert sources[0]['snippet']=='Review AI use & human oversight.'
     assert '<b>' not in content and '&amp;' not in content
+
+
+def test_empty_passages_return_no_results(monkeypatch):
+    monkeypatch.setattr(rag, "retrieve", lambda *a: [{"id":"empty", "title":"Empty", "snippets":[{"snippet":"<b> </b>"}]}])
+    monkeypatch.setattr(gemini, "stream", Mock(side_effect=AssertionError("Must not generate")))
+    events=[json.loads(e.removeprefix("data: ")) for e in rag.stream_city_governance_rag_vertex("What is the AI policy?", response_language="en")]
+    assert events[-1]["status"]=="completed"
+    assert events[-2]["text"]==rag.NO_RESULTS_MESSAGES["en"]

@@ -8,7 +8,33 @@ function load(file) {
   const module = new Module(file); module._compile(code,file); return module.exports;
 }
 const {readSSE}=load('src/lib/sse.ts');
-const {answerRevealOffsets,shouldFollowAnswer}=load('src/lib/answer-reveal.ts');
+const {answerRevealOffsets,advanceAnswerReveal,shouldFollowAnswer}=load('src/lib/answer-reveal.ts');
+test('Streaming reveal advances monotonically as new fragments arrive and drains bursts',()=>{
+  const prefix='## Quick take\n\nPreview.\n\n';
+  let content=prefix+'## Full answer\n\n';
+  let position=answerRevealOffsets(content,prefix.length,true)[0];
+  for(const fragment of ['First finding. ', 'Second finding. ', 'More evidence. '.repeat(100)]){
+    content+=fragment;
+    const offsets=answerRevealOffsets(content,prefix.length,true);
+    const next=advanceAnswerReveal(offsets,position,32);
+    assert.ok(next>position && next<=content.length);
+    position=next;
+  }
+  const offsets=answerRevealOffsets(content,prefix.length,false);
+  for(let frame=0;frame<100;frame++)position=advanceAnswerReveal(offsets,position,32);
+  assert.equal(position,content.length);
+});
+test('Citation markers split between network fragments wait until complete',()=>{
+  const prefix='## Full answer\n\nEvidence ';
+  const incomplete=prefix+'[1, ';
+  assert.equal(answerRevealOffsets(incomplete,0,true).at(-1),prefix.length);
+  const complete=incomplete+'2].';
+  const offsets=answerRevealOffsets(complete,0,true);
+  assert.equal(offsets.at(-1),complete.length);
+  assert.ok(!offsets.some(end=>end>prefix.length && end<prefix.length+6));
+  // A malformed unfinished marker is still visible after completion/error.
+  assert.equal(answerRevealOffsets(incomplete,0,false).at(-1),incomplete.length);
+});
 test('Full answers preserve the preview and reveal complete Unicode characters and citations',()=>{
   const preview='## 快速重點\n\n先閱讀這段。';
   const heading='\n\n## 完整回答\n\n';
@@ -28,7 +54,7 @@ test('Full-answer arrival and completion retain reading position even if waiting
   assert.equal(shouldFollowAnswer({stage:'expanding'}),false);
   assert.equal(shouldFollowAnswer({detailedStart:0}),false);
   assert.equal(shouldFollowAnswer({detailedStart:180}),false);
-  assert.equal(shouldFollowAnswer({}),true);
+  assert.equal(shouldFollowAnswer({}),true); // Restored history has no live presentation metadata.
 });
 const {normalizeInterfaceLanguage,INTERFACE_LANGUAGES,CONTENT_LANGUAGES}=load('src/lib/languages.ts');
 test('SSE preserves multilingual text split across every byte boundary',async()=>{

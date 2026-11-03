@@ -7,8 +7,13 @@ from app.services import gemini, rag_timing
 from app.pipelines import vertex_search as rag
 
 
-def test_brief_and_detailed_preserve_citations_and_use_scoped_model_configuration(monkeypatch):
-    monkeypatch.setattr(rag,'retrieve',lambda *a:[])
+@pytest.fixture
+def evidence(monkeypatch):
+    monkeypatch.setattr(rag,'retrieve',lambda *a:[dict(id='policy',title='Policy',
+        snippets=[{'snippet':'Human review is required.'}],metadata={})])
+
+
+def test_brief_and_detailed_preserve_citations_and_use_scoped_model_configuration(monkeypatch,evidence):
     generate=Mock(return_value='No evidence.')
     monkeypatch.setattr(gemini,'generate',generate)
     brief=rag.query_city_governance_rag_vertex('What is the AI policy?',answer_detail='brief')
@@ -22,7 +27,7 @@ def test_brief_and_detailed_preserve_citations_and_use_scoped_model_configuratio
     assert 'detailed explanation' in generate.call_args.args[1]
 
 
-def test_max_tokens_partial_stream_is_not_reported_as_completed(monkeypatch):
+def test_max_tokens_partial_stream_is_not_reported_as_completed(monkeypatch,evidence):
     from contextlib import contextmanager
     from google.genai import types
     @contextmanager
@@ -31,15 +36,13 @@ def test_max_tokens_partial_stream_is_not_reported_as_completed(monkeypatch):
             SimpleNamespace(text='Partial [1]',usage_metadata=None,candidates=[]),
             SimpleNamespace(text='',usage_metadata=None,candidates=[SimpleNamespace(finish_reason=types.FinishReason.MAX_TOKENS)])])))
     monkeypatch.setattr(gemini,'client',api)
-    monkeypatch.setattr(rag,'retrieve',lambda *a:[])
     events=[json.loads(e.removeprefix('data: ')) for e in rag.stream_city_governance_rag_vertex('What is the AI policy?',answer_detail='brief')]
     assert events[-2]['type']=='error' and events[-2]['partial']
     assert events[-1]['status']=='failed'
 
 
-def test_request_trace_correlates_stages_and_handled_failures_without_content(monkeypatch,caplog):
+def test_request_trace_correlates_stages_and_handled_failures_without_content(monkeypatch,caplog,evidence):
     caplog.set_level(logging.INFO,logger='app.services.rag_timing')
-    monkeypatch.setattr(rag,'retrieve',lambda *a:[])
     monkeypatch.setattr(gemini,'stream',Mock(side_effect=RuntimeError('SECRET provider detail')))
     frames=list(rag.stream_city_governance_rag_vertex('Private query about city policy',answer_detail='brief'))
     events=[json.loads(r.message) for r in caplog.records if r.name=='app.services.rag_timing']
