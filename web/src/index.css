@@ -93,7 +93,7 @@
 .sidebar-link { text-align: left; color: var(--color-muted); font: 13px/1.6 var(--font-ui); padding: 9px 6px; border-radius: 8px; }
 .sidebar-link:hover, .sidebar-link[aria-current] { background: var(--color-accent-100); color: var(--color-accent-700); }
 .chat-view { flex: 1; display: flex; flex-direction: column; min-width: 0; background: #fff; }
-.chat-scroll { flex: 1; overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
+.chat-scroll { flex: 1; overflow-y: auto; min-height: 0; overscroll-behavior: contain; overflow-anchor: none; }
 .welcome { max-width: 720px; margin: 0 auto; padding: clamp(32px, 6vh, 72px) clamp(20px, 2.5vw, 32px) 40px; }
 .welcome-dot { width: 10px; height: 10px; margin-bottom: 24px; }
 .welcome h1 { font-size: clamp(28px, 2.8vw, 38px); line-height: 1.26; letter-spacing: .01em; font-weight: 500; margin: 0 0 14px; }
@@ -111,6 +111,7 @@
 .assistant-message { margin-bottom: 32px; animation: riseIn .25s ease-out; }
 .answer-content { font-size: 16px; line-height: 1.9; overflow-wrap: anywhere; }
 .answer-content p { margin: 0; }
+.reveal-answer { margin-top: 12px; }
 .paragraph-break { height: 14px; }
 .answer-heading { font-size: 20px; margin: 20px 0 14px; }
 .answer-heading:first-child { margin-top: 0; }

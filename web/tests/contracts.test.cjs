@@ -8,6 +8,28 @@ function load(file) {
   const module = new Module(file); module._compile(code,file); return module.exports;
 }
 const {readSSE}=load('src/lib/sse.ts');
+const {answerRevealOffsets,shouldFollowAnswer}=load('src/lib/answer-reveal.ts');
+test('Full answers preserve the preview and reveal complete Unicode characters and citations',()=>{
+  const preview='## 快速重點\n\n先閱讀這段。';
+  const heading='\n\n## 完整回答\n\n';
+  const content=preview+heading+'中文🌏 **evidence** [1, 2] and [citation:3].';
+  const offsets=answerRevealOffsets(content,preview.length);
+  assert.ok(content.slice(0,offsets[0]).includes('## 完整回答'));
+  assert.equal(offsets.at(-1),content.length);
+  for(const end of offsets){
+    const visible=content.slice(0,end);
+    assert.ok(visible.startsWith(preview));
+    assert.ok(!/[\uD800-\uDBFF]$/.test(visible));
+    assert.ok(!/\[[^\]]*$/.test(visible));
+  }
+});
+test('Full-answer arrival and completion retain reading position even if waiting was batched away',()=>{
+  assert.equal(shouldFollowAnswer({stage:'generating'}),true);
+  assert.equal(shouldFollowAnswer({stage:'expanding'}),false);
+  assert.equal(shouldFollowAnswer({detailedStart:0}),false);
+  assert.equal(shouldFollowAnswer({detailedStart:180}),false);
+  assert.equal(shouldFollowAnswer({}),true);
+});
 const {normalizeInterfaceLanguage,INTERFACE_LANGUAGES,CONTENT_LANGUAGES}=load('src/lib/languages.ts');
 test('SSE preserves multilingual text split across every byte boundary',async()=>{
   const payload = 'data: '+JSON.stringify({type:'sources',sources:[{language:'fr'}]})+'\n\n'+'data: '+JSON.stringify({type:'chunk',text:'Français 繁體中文 日本語'})+'\n\n'+'data: {"type":"done","status":"completed"}\n\n';

@@ -20,6 +20,8 @@ export interface ChatMessage {
   citations?: Citation[];
   timestamp: string;
   isStreaming?: boolean;
+  // Live presentation metadata only; restored conversations display in full.
+  detailedStart?: number;
   response_language?: string;
   error?: string;
   stage?: 'searching' | 'generating' | 'expanding';

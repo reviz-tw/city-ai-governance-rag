@@ -68,6 +68,7 @@ export default function App() {
     setLoading(true);
     const update = (changes: Partial<ChatMessage>) => setMessages(prev => prev.map(m => m.id === id ? {...m,...changes} : m));
     let content = '';
+    let detailedStart: number | undefined;
     const started = performance.now();
     let sourcesAt: number | undefined, firstTextAt: number | undefined;
     try {
@@ -81,7 +82,12 @@ export default function App() {
         } else if (event.type === 'sources') {
           sourcesAt = performance.now() - started;
           update({citations:event.sources, response_language:event.response_language});
-        } else if (event.type === 'chunk') {if (firstTextAt === undefined) firstTextAt = performance.now() - started; content += event.text; update({content, ...(event.phase === 'detailed' ? {stage:undefined} : {})});}
+        } else if (event.type === 'chunk') {
+          if (event.phase === 'detailed') detailedStart ??= content.length;
+          if (firstTextAt === undefined) firstTextAt = performance.now() - started;
+          content += event.text;
+          update({content, detailedStart, ...(event.phase === 'detailed' ? {stage:undefined} : {})});
+        }
         else if (event.type === 'error') {update({error:event.message});}
       }
     } catch (e: any) {const message=panelText(lang,panelError(e)); update({error:message});}

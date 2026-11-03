@@ -8,6 +8,8 @@ import {answerEvidence, CITATION_MARKER, citationIds} from '../lib/answer-artifa
 import {useLocale} from '../lib/locale';
 import {WorkspacePanel} from './WorkspacePanel';
 import {sourceDisplayText} from '../lib/source-display';
+import {AnswerContent} from './AnswerContent';
+import {shouldFollowAnswer} from '../lib/answer-reveal';
 
 interface ChatViewProps {
   t: UIStrings; lang: InterfaceLanguage; messages: ChatMessage[]; loading: boolean;
@@ -26,6 +28,7 @@ export function ChatView({t, lang, messages, loading, onSendMessage, onClearHist
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const scrollArea = useRef<HTMLDivElement>(null);
   const followStream = useRef(true);
+  const scrolledAnswerId = useRef<string>();
   const input = useRef<HTMLTextAreaElement>(null);
   const copyTimer = useRef<ReturnType<typeof setTimeout>>();
   const latestAnswer = [...messages].reverse().find(m => m.role === 'assistant');
@@ -43,10 +46,15 @@ export function ChatView({t, lang, messages, loading, onSendMessage, onClearHist
 
   useEffect(() => {
     setSourceMessageId(latestAnswer?.id || ''); setSelectedCitation(null); setCopyError('');
-    followStream.current = true;
   }, [latestAnswer?.id]);
   useEffect(() => {
-    if (followStream.current && scrollArea.current) scrollArea.current.scrollTop = scrollArea.current.scrollHeight;
+    if (scrolledAnswerId.current !== latestAnswer?.id) {
+      scrolledAnswerId.current = latestAnswer?.id;
+      followStream.current = true;
+    }
+    if (followStream.current && shouldFollowAnswer(latestAnswer) && scrollArea.current) {
+      scrollArea.current.scrollTop = scrollArea.current.scrollHeight;
+    }
   }, [messages, loading]);
   useEffect(() => {
     if (input.current) {input.current.style.height = 'auto'; input.current.style.height = `${Math.min(input.current.scrollHeight, 140)}px`;}
@@ -122,7 +130,9 @@ export function ChatView({t, lang, messages, loading, onSendMessage, onClearHist
         </div> : <div className="conversation">
           {messages.map(message => message.role === 'user' ? <div className="user-message" key={message.id}><p dir="auto">{message.content}</p></div> : <article className="assistant-message" key={message.id}>
             {message.isStreaming && !message.content && <div className="search-status" role="status"><span className="loading-dots"><i/><i/><i/></span><span>{message.stage === 'generating' ? statusCopy[lang][message.sourceCount ? 1 : 2] : statusCopy[lang][0]}</span></div>}
-            <div className="answer-content" dir="auto" lang={message.response_language}>{formatted(message)}</div>
+            <AnswerContent key={`${message.id}:${message.detailedStart ?? 'preview'}`} content={message.content}
+              start={message.detailedStart} animate={message.id === latestAnswer?.id && !message.error}
+              language={message.response_language} render={content => formatted({...message, content})}/>
             {message.error && <p role="alert" className="error-message">{message.error}</p>}
             {message.isStreaming && !message.error && message.content && message.stage === 'expanding' && <div className="search-status full-answer-status" role="status" aria-atomic="true"><span className="loading-dots" aria-hidden="true"><i/><i/><i/></span><span>{text('preparingFullAnswer')}</span></div>}
             {message.isStreaming && !message.error && message.content && message.stage === 'generating' && <span className="streaming-mark" role="status" aria-label={t.searchingText}/>}
