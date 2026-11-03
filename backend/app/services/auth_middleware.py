@@ -1,4 +1,5 @@
 import re
+from app.services.rag_timing import span
 from fastapi import HTTPException, Request
 from starlette.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
@@ -18,7 +19,8 @@ class AuthenticationMiddleware:
             return await self.app(scope, receive, send)
         public = path in {'/api/auth/config','/api/auth/login','/api/auth/logout','/api/health'}
         try:
-            user = None if public else await run_in_threadpool(authenticate, request)
+            with span('authentication'):
+                user = None if public else await run_in_threadpool(authenticate, request)
             if not public and user is None:
                 raise HTTPException(401, 'Sign in with Google to continue')
             check_origin(request)

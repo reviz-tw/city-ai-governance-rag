@@ -1,6 +1,6 @@
 import json
 from urllib.parse import urlsplit
-from typing import Optional
+from typing import Literal, Optional
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from app.core.config import settings
@@ -36,16 +36,17 @@ def search_city_ai_governance_knowledge(query: str, city: Optional[str] = None,
 def ask_city_ai_governance_rag(question: str, city: Optional[str] = None,
                                response_language: str = 'auto', interface_language: Optional[str] = None,
                                source_languages: Optional[list[str]] = None,
-                               research_context: Optional[ResearchContext] = None) -> str:
+                               research_context: Optional[ResearchContext] = None, answer_detail: Literal['progressive','brief','detailed'] = 'progressive') -> str:
     """Answer using original evidence and return citations with document IDs and languages.
 
+    The default progressive mode returns a quick take followed by the full answer.
     response_language controls the answer; auto detects the question language.
     interface_language is only a fallback. source_languages independently filters sources.
     research_context contains only explicitly supplied bounded history; host conversations are never read.
     """
     require_user()
     return output(query_city_governance_rag_vertex(question, city, response_language, interface_language,
-                                                    source_languages, research_context))
+                                                    source_languages, research_context, answer_detail))
 
 @mcp.tool()
 def ai_clean_and_annotate_governance_doc(raw_text: str, filename: Optional[str] = None) -> str:

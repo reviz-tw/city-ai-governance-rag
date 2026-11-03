@@ -22,6 +22,6 @@ export interface ChatMessage {
   isStreaming?: boolean;
   response_language?: string;
   error?: string;
-  stage?: 'searching' | 'generating';
+  stage?: 'searching' | 'generating' | 'expanding';
   sourceCount?: number;
 }

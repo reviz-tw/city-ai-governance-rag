@@ -1,6 +1,7 @@
 import type {InterfaceLanguage} from './languages';
 // Each row is complete in zh, en, ja, fr, es and ru. No implicit language fallback.
 export const PANEL_COPY = {
+  preparingFullAnswer:['短答已完成，完整回答整理中……','The quick take is ready. Preparing the full answer…','要点は表示済みです。詳しい回答を準備しています…','Le résumé est prêt. Préparation de la réponse complète…','El resumen está listo. Preparando la respuesta completa…','Краткий ответ готов. Подготавливаем полный ответ…'],
   close:['關閉','Close','閉じる','Fermer','Cerrar','Закрыть'],
   back:['返回文件清單','Back to documents','資料一覧に戻る','Retour aux documents','Volver a documentos','К списку документов'],
   loading:['載入中……','Loading…','読み込み中…','Chargement…','Cargando…','Загрузка…'],

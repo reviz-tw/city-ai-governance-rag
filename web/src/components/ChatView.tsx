@@ -124,7 +124,8 @@ export function ChatView({t, lang, messages, loading, onSendMessage, onClearHist
             {message.isStreaming && !message.content && <div className="search-status" role="status"><span className="loading-dots"><i/><i/><i/></span><span>{message.stage === 'generating' ? statusCopy[lang][message.sourceCount ? 1 : 2] : statusCopy[lang][0]}</span></div>}
             <div className="answer-content" dir="auto" lang={message.response_language}>{formatted(message)}</div>
             {message.error && <p role="alert" className="error-message">{message.error}</p>}
-            {message.isStreaming && message.content && <span className="streaming-mark" role="status" aria-label={t.searchingText}/>}
+            {message.isStreaming && !message.error && message.content && message.stage === 'expanding' && <div className="search-status full-answer-status" role="status" aria-atomic="true"><span className="loading-dots" aria-hidden="true"><i/><i/><i/></span><span>{text('preparingFullAnswer')}</span></div>}
+            {message.isStreaming && !message.error && message.content && message.stage === 'generating' && <span className="streaming-mark" role="status" aria-label={t.searchingText}/>}
             {!message.isStreaming && <footer className="answer-footer">
               <span className="answer-time">{message.timestamp}</span>
               {!!message.citations?.length && <button className="btn btn-ghost answer-sources" onClick={() => showSources(message)}><BookOpen size={14}/>{t.sourcesHeader} · {message.citations.length}</button>}

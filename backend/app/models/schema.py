@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from pydantic import BaseModel, Field, AliasChoices, field_validator
 from app.services.languages import normalize_language, source_languages as normalize_sources
 from app.services.context import ResearchContext
@@ -74,6 +74,7 @@ class LanguageRequest(BaseModel):
 class RAGQueryRequest(LanguageRequest):
     query: str = Field(min_length=1, max_length=8000)
     city: str | None = Field(None, max_length=100)
+    answer_detail: Literal['progressive', 'brief', 'detailed'] = 'progressive'
 
 class RetrievedSource(BaseModel):
     content: str

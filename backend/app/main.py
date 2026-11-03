@@ -186,6 +186,8 @@ class MCPRoutingMiddleware:
 mcp_unified_app = UnifiedMCPApp(sse_app, session_manager)
 app.add_middleware(MCPRoutingMiddleware, mcp_app=mcp_unified_app)
 app.add_middleware(AuthenticationMiddleware)
+from app.services.rag_timing import RagTimingMiddleware
+app.add_middleware(RagTimingMiddleware)
 app.mount("/mcp", mcp_unified_app)
 logger.info("MCP 整合端點已成功掛載於 /mcp (支援 Streamable HTTP 及 SSE)")
 

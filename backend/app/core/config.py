@@ -23,10 +23,14 @@ class Settings(BaseSettings):
     GEMINI_LOCATION: str = "global"
     GEMINI_PROVIDER: Literal["vertex", "developer"] = "vertex"
     GEMINI_API_KEY: str = Field("", repr=False)
-    GEMINI_MAX_OUTPUT_TOKENS: int = 8192
+    GEMINI_MAX_OUTPUT_TOKENS: int = 12000
     GEMINI_TEMPERATURE: float = 1.0
     GEMINI_THINKING_BUDGET: int | None = None
     GEMINI_THINKING_LEVEL: str | None = None
+    RAG_BRIEF_MAX_OUTPUT_TOKENS: int = Field(3072, ge=512, le=8192)
+    RAG_THINKING_LEVEL: Literal['LOW', 'MEDIUM', 'HIGH'] = 'LOW'
+    RAG_DETAILED_THINKING_LEVEL: Literal['LOW', 'MEDIUM', 'HIGH'] = 'MEDIUM'
+    RAG_PREVIEW_TIMEOUT_MS: int = Field(8000, ge=1000, le=30000)
     GEMINI_TIMEOUT_MS: int = 120000
     CONTEXT_INPUT_TOKENS: int = 16000
     CONTEXT_HISTORY_TOKENS: int = 3000

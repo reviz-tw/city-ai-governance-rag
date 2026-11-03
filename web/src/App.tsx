@@ -81,7 +81,7 @@ export default function App() {
         } else if (event.type === 'sources') {
           sourcesAt = performance.now() - started;
           update({citations:event.sources, response_language:event.response_language});
-        } else if (event.type === 'chunk') {if (firstTextAt === undefined) firstTextAt = performance.now() - started; content += event.text; update({content});}
+        } else if (event.type === 'chunk') {if (firstTextAt === undefined) firstTextAt = performance.now() - started; content += event.text; update({content, ...(event.phase === 'detailed' ? {stage:undefined} : {})});}
         else if (event.type === 'error') {update({error:event.message});}
       }
     } catch (e: any) {const message=panelText(lang,panelError(e)); update({error:message});}

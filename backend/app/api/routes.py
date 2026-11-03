@@ -90,7 +90,7 @@ async def api_upload_and_index(
 def api_query_rag(request: RAGQueryRequest):
     return query_city_governance_rag_vertex(query=request.query, city_filter=request.city,
         response_language=request.response_language, interface_language=request.interface_language,
-        source_languages=request.source_languages, research_context=request.research_context)
+        source_languages=request.source_languages, research_context=request.research_context, answer_detail=request.answer_detail)
 
 @router.get("/documents/list")
 async def api_list_documents():
@@ -289,11 +289,14 @@ async def api_chat_stream(request: ChatStreamRequest):
     context=request.research_context
     turn_id=None
     if request.session_id:
-        turn_id,context=conversations.begin(request.session_id,request.query)
+        from starlette.concurrency import run_in_threadpool
+        from app.services.rag_timing import span
+        with span('conversation_begin'):
+            turn_id,context=await run_in_threadpool(conversations.begin,request.session_id,request.query)
     upstream=stream_city_governance_rag_vertex(
         query=request.query,city_filter=request.city,response_language=request.response_language,
         interface_language=request.interface_language,source_languages=request.source_languages,
-        research_context=context)
+        research_context=context, answer_detail=request.answer_detail)
     return StreamingResponse(conversations.stream(request.session_id,turn_id,upstream)
         if turn_id else upstream,media_type='text/event-stream')
 

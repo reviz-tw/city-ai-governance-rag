@@ -18,7 +18,7 @@ def retrieved(monkeypatch):
 def test_chinese_answer_does_not_filter_english_sources(retrieved,monkeypatch):
     generate=Mock(return_value='有依據的回答 [1]')
     monkeypatch.setattr(gemini,'generate',generate)
-    result=rag.query_city_governance_rag_vertex('如何管理城市人工智慧的政策風險？',interface_language='en')
+    result=rag.query_city_governance_rag_vertex('如何管理城市人工智慧的政策風險？',interface_language='en',answer_detail='detailed')
     assert retrieved.call_args.args[2] is None
     assert result['response_language']=='zh-TW'
     assert result['sources'][0]['language']=='en'
@@ -42,12 +42,12 @@ def test_fallback_respects_scope(monkeypatch):
 
 
 def test_stream_failure_does_not_retry_or_report_success(retrieved,monkeypatch):
-    def failing(*args):
+    def failing(*args,**kwargs):
         yield 'Partial '
         raise RuntimeError('private provider details')
     mocked=Mock(side_effect=failing)
     monkeypatch.setattr(gemini,'stream',mocked)
-    events=[json.loads(e.removeprefix('data: ')) for e in rag.stream_city_governance_rag_vertex('What is the governance policy?')]
+    events=[json.loads(e.removeprefix('data: ')) for e in rag.stream_city_governance_rag_vertex('What is the governance policy?',answer_detail='brief')]
     assert [e['type'] for e in events]==['status','sources','status','chunk','error','done']
     assert events[-1]['status']=='failed' and events[-2]['partial']
     assert mocked.call_count==1
@@ -58,7 +58,7 @@ def test_no_evidence_prompt_forbids_invented_facts(monkeypatch):
     monkeypatch.setattr(rag,'retrieve',lambda *a:[])
     generate=Mock(return_value='No evidence available.')
     monkeypatch.setattr(gemini,'generate',generate)
-    result=rag.query_city_governance_rag_vertex('What policy is supported?')
+    result=rag.query_city_governance_rag_vertex('What policy is supported?',answer_detail='detailed')
     assert result['sources']==[]
     assert 'never invent' in generate.call_args.args[1]
     assert '22' not in result['answer']

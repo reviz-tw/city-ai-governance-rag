@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select, delete, update
-from app.services import store, gemini
+from app.services import store, gemini, rag_timing
 from app.core.config import settings
 from app.services.auth import require_user
 from app.services.context import ResearchContext, HistoryMessage, clip
@@ -162,14 +162,17 @@ def stream(session_id, turn_id, upstream):
                 sources=payload['sources'];language=payload.get('response_language');city=payload.get('context_city')
             elif payload['type']=='done': status=payload.get('status','completed')
             if time.time()-checkpoint>=2 and payload['type']!='done':
+                checkpoint_started=time.monotonic()
                 with store.session() as db:
                     db.execute(update(store.ChatSession).where(store.ChatSession.id==session_id).values(busy_until=time.time()+600))
                     db.execute(update(store.ChatTurn).where(store.ChatTurn.id==turn_id).values(answer=answer,sources=sources,response_language=language))
                     db.commit()
+                rag_timing.record_since('conversation_checkpoint',checkpoint_started)
                 checkpoint=time.time()
             # Save before delivering done, so a successful response is already durable.
             if payload['type']=='done':
-                finish(session_id,turn_id,answer,sources,language,city,status)
+                with rag_timing.span('conversation_finish'):
+                    finish(session_id,turn_id,answer,sources,language,city,status)
             yield frame
     finally:
         if hasattr(upstream,'close'): upstream.close()
