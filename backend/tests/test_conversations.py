@@ -136,3 +136,15 @@ def test_persisted_summary_is_not_silently_rewritten(monkeypatch):
     assert value['summary']=='已追溯的摘要'
     assert len(value['history'])==6
     assert value['retrieval_query']=='獨立查詢'
+
+
+def test_default_conversation_title_can_be_localized_without_translating_user_content():
+    sid = c.create_session()['id']
+    assert c.list_sessions()[0]['default_title'] is True
+    c.rename_session(sid, c.Rename(title='我的研究'))
+    assert c.list_sessions()[0]['default_title'] is False
+    assert c.list_sessions()[0]['title'] == '我的研究'
+    # A first question matching the old default is still user content.
+    complete(sid, '新對話')
+    assert c.list_sessions()[0]['title'] == '新對話'
+    assert c.list_sessions()[0]['default_title'] is False

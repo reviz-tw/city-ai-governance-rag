@@ -4,7 +4,7 @@ import time
 import uuid
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select, delete, update
+from sqlalchemy import select, delete, update, exists
 from app.services import store, gemini, rag_timing
 from app.core.config import settings
 from app.services.auth import require_user
@@ -45,8 +45,11 @@ def create_session():
 def list_sessions():
     user = require_user()
     with store.session() as db:
-        return [dict(id=s.id,title=s.title,updated_at=s.updated_at) for s in db.scalars(
-            select(store.ChatSession).where(store.ChatSession.owner == user.id).order_by(store.ChatSession.updated_at.desc()))]
+        has_turns = exists().where(store.ChatTurn.session_id == store.ChatSession.id)
+        return [dict(id=s.id,title=s.title,updated_at=s.updated_at,
+                     default_title=not populated and s.title == '新對話')
+                for s,populated in db.execute(select(store.ChatSession,has_turns)
+                    .where(store.ChatSession.owner == user.id).order_by(store.ChatSession.updated_at.desc()))]
 
 
 @router.get('/{session_id}')
