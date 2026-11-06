@@ -39,15 +39,18 @@ steps:
           --no-traffic --tag=candidate --revision-suffix='web-${BUILD_ID}' --quiet
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: verify-and-promote-web
-    entrypoint: python3
+    entrypoint: bash
     args:
-      - infra/verify_deployment.py
-      - '${_SERVICE_NAME}'
-      - '${_LOCATION}'
-      - '$PROJECT_ID'
-      - '${_SERVICE_NAME}-web-${BUILD_ID}'
-      - '${_SERVICE_URL}'
-      - expected-web
+      - -ceu
+      - |
+        py="$$(command -v python3 || gcloud info --format='value(basic.python_location)')"
+        "$$py" infra/verify_deployment.py \
+          '${_SERVICE_NAME}' \
+          '${_LOCATION}' \
+          '$PROJECT_ID' \
+          '${_SERVICE_NAME}-web-${BUILD_ID}' \
+          '${_SERVICE_URL}' \
+          expected-web
 images:
   - '${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:web-${BUILD_ID}'
 substitutions:

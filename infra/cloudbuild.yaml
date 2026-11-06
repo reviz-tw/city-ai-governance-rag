@@ -94,14 +94,17 @@ steps:
 
   # 4. Verify authentication and Admin, then move the same service URL to this revision.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: python3
+    entrypoint: bash
     args:
-      - 'infra/verify_deployment.py'
-      - '${_SERVICE_NAME}'
-      - '${_LOCATION}'
-      - '$PROJECT_ID'
-      - '${_SERVICE_NAME}-b-${BUILD_ID}'
-      - '${_SERVICE_URL}'
+      - -ceu
+      - |
+        py="$$(command -v python3 || gcloud info --format='value(basic.python_location)')"
+        "$$py" infra/verify_deployment.py \
+          '${_SERVICE_NAME}' \
+          '${_LOCATION}' \
+          '$PROJECT_ID' \
+          '${_SERVICE_NAME}-b-${BUILD_ID}' \
+          '${_SERVICE_URL}'
     id: 'verify-and-promote'
 
 images:
