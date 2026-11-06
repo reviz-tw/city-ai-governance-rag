@@ -1,4 +1,5 @@
 import hashlib
+import json
 from unittest.mock import Mock
 import pytest
 from app.core.config import settings
@@ -106,10 +107,16 @@ def test_three_thousand_chunks_publish_after_all_search_pages_are_verified(sourc
         pub = db.get(store.Publication, doc.id + ':1')
     records = chunks.manifest(doc, pub, 'gs://original/file')
     pages = []
+    exact_lookups = []
     ready = [False]
     def paginated(path, payload=None, method='GET', **kwargs):
         if not path.endswith(':search'):
             return request(path, payload, method, **kwargs)
+        if 'chunk_id: ANY(' in payload['filter']:
+            expression = payload['filter'].split('chunk_id: ANY(', 1)[1][:-1]
+            identifiers = json.loads('[' + expression + ']')
+            exact_lookups.append(identifiers)
+            return {'results': []}
         offset = int(payload['pageToken'] or '0')
         size = payload['pageSize']
         assert size == 100
@@ -123,6 +130,7 @@ def test_three_thousand_chunks_publish_after_all_search_pages_are_verified(sourc
     monkeypatch.setattr(chunks.cloud, 'request', paginated)
     jobs.run(task['id'])
     assert pages == list(range(0, 3000, 100))
+    assert exact_lookups == [['c3000']]
     assert jobs.get(task['id']).status == 'queued'
     assert documents.get(doc.id).published_version == 0
     ready[0] = True
@@ -185,7 +193,7 @@ def test_shared_retrieve_never_reintroduces_legacy_snippets_after_publication(so
     expected = [{'id': doc.id, 'chunk_id': 'reviewed', 'snippets': [{'snippet': 'Reviewed current content'}]}]
     monkeypatch.setattr(chunks, 'search', lambda *args: expected)
     monkeypatch.setattr(vertex_search, 'search_vertex_data_store', lambda *args, **kwargs: [{'id': 'legacy-id', 'snippets': [{'snippet': 'Outdated original'}]}])
-    monkeypatch.setattr(documents, 'register_legacy', lambda result: doc.id)
+    monkeypatch.setattr(documents, 'legacy_catalog_records', lambda results: ({},0))
     assert vertex_search.retrieve('policy') == expected
 
 

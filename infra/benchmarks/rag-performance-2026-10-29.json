@@ -1,0 +1,534 @@
+{
+  "testedBackendImage": "034b6127-27a4-426a-b155-f9203187feef",
+  "releaseBuild": "2893ddc4-6cca-454b-826c-f5b1ec513943",
+  "acceptance": {
+    "model": "gemini-3.7-flash",
+    "synthetic_evidence": [
+      {
+        "citation_id": 1,
+        "title": "Synthetic Northport participation policy",
+        "content": "Northport requires a human reviewer to approve every AI-generated public consultation summary before publication. Personal data must be removed before input to the AI. The only exception is an urgent emergency alert, which may be published first but must be reviewed within 24 hours. This exception does not apply to budget decisions."
+      },
+      {
+        "citation_id": 2,
+        "title": "Synthetic Southport participation pilot",
+        "content": "Southport uses AI to cluster public comments; clustering does not decide policy. A human officer must approve the resulting policy recommendations. Participation was 1200 people in 2025. The evaluation did not measure representativeness. The documents do not state a project budget."
+      }
+    ],
+    "cases": [
+      [
+        "en",
+        "Compare the two cities: can AI publish summaries or decide policy without a human? Explain the emergency exception."
+      ],
+      [
+        "zh-TW",
+        "比較兩座城市的人工審核規定與緊急例外。Southport 有 1200 人參加，能證明有代表性嗎？預算多少？"
+      ],
+      [
+        "es",
+        "Compara la revisión humana en ambas ciudades. ¿Cuál es la excepción de emergencia? ¿Se conoce el presupuesto de Southport?"
+      ],
+      [
+        "ja",
+        "両市の人による審査と緊急時の例外を比較してください。Southport の参加者数から代表性を証明できますか。予算はいくらですか。"
+      ]
+    ],
+    "repetitions": 1,
+    "summary": {
+      "baseline": {
+        "successes": 4,
+        "runs": 4,
+        "median_first_text_ms": 6244.1,
+        "median_complete_ms": 10407.2
+      },
+      "brief_medium": {
+        "successes": 4,
+        "runs": 4,
+        "median_first_text_ms": 6504.549999999999,
+        "median_complete_ms": 7625.4
+      },
+      "brief_low": {
+        "successes": 4,
+        "runs": 4,
+        "median_first_text_ms": 1324.7,
+        "median_complete_ms": 2618.25
+      }
+    },
+    "runs": [
+      {
+        "repeat": 0,
+        "case": 0,
+        "language": "en",
+        "profile": "baseline",
+        "detail": "detailed",
+        "thinking": "MEDIUM",
+        "status": "completed",
+        "answer": "Based on the provided evidence, here is the comparison between Northport and Southport regarding AI-generated summaries, policy decisions, and the emergency exception.\n\n---\n\n### 1. Publishing Summaries Without a Human\n* **Northport:** \n  * **Evidence:** Northport requires a human reviewer to approve every AI-generated public consultation summary prior to publication [1]. \n  * **Exception:** An urgent emergency alert is the sole exception that permits publishing before human approval [1].\n* **Southport:** \n  * **Evidence / Limitation:** The provided text does not specify whether AI is used to draft or publish summaries, nor does it specify rules for summary publication in Southport [2].\n\n---\n\n### 2. Deciding Policy Without a Human\n* **Northport:** \n  * **Evidence / Limitation:** The text does not explicitly specify a general rule for whether AI can decide policy overall. However, it mandates human approval for consultation summaries and explicitly notes that the emergency exception does not apply to budget decisions [1].\n* **Southport:** \n  * **Evidence:** AI cannot decide policy. Southport uses AI specifically to cluster public comments, and this clustering does not decide policy [2]. Furthermore, a human officer must approve the resulting policy recommendations [2].\n\n---\n\n### 3. The Emergency Exception\n* **Northport:**\n  * **Evidence:** An urgent emergency alert is the only exception to Northport’s requirement for prior human review. Under this exception, the alert may be published first, but it must undergo human review within 24 hours [1].\n  * **Scope & Restrictions:** This emergency exception explicitly does not apply to budget decisions [1].\n* **Southport:**\n  * **Evidence / Limitation:** An emergency exception is not specified or mentioned for Southport [2].\n\n---\n\n### Distinctions, Limitations, and Inferences\n* **Evidence vs. Absence:**\n  * Rules established for one city cannot be assumed for the other. The absence of a summary publishing rule or an emergency exception in Southport's documentation is an omission in the record, not an explicit prohibition or authorization [2].\n  * Similarly, Northport's text establishes rules for public consultation summaries and budget exceptions, but does not provide a comprehensive policy on all autonomous AI policy decisions [1].\n* **Data and Pilot Limitations:**\n  * Southport's pilot involved 1,200 participants in 2025, but the evaluation did not measure representativeness, and project budget figures were not stated [2].",
+        "first_text_ms": 7176.6,
+        "request_id": "7075e472797448b7a9bf6b1370a88cc5",
+        "model_metrics": {
+          "input_tokens": 321,
+          "output_tokens": 532,
+          "thought_tokens": 820,
+          "reason": "FinishReason.STOP"
+        },
+        "complete_ms": 11146.2,
+        "has_numeric_citation": true,
+        "requires_human_quality_review": true
+      },
+      {
+        "repeat": 0,
+        "case": 0,
+        "language": "en",
+        "profile": "brief_medium",
+        "detail": "brief",
+        "thinking": "MEDIUM",
+        "status": "completed",
+        "answer": "* **Northport**: AI cannot publish public consultation summaries without prior human approval [1]. The sole exception is an urgent emergency alert, which may be published first but must be reviewed by a human within 24 hours [1]. This emergency exception explicitly does not apply to budget decisions, and evidence does not permit AI to decide policy independently [1].\n* **Southport**: AI cannot decide policy; it is limited to clustering public comments, and a human officer must approve the resulting policy recommendations [2]. Whether AI may publish summaries independently or use an emergency exception is not specified in the evidence [2].",
+        "first_text_ms": 6909.9,
+        "request_id": "62e11cd9c38348f7821bf79f8397f289",
+        "model_metrics": {
+          "input_tokens": 450,
+          "output_tokens": 123,
+          "thought_tokens": 746,
+          "reason": "FinishReason.STOP"
+        },
+        "complete_ms": 7700.1,
+        "has_numeric_citation": true,
+        "requires_human_quality_review": true
+      },
+      {
+        "repeat": 0,
+        "case": 0,
+        "language": "en",
+        "profile": "brief_low",
+        "detail": "brief",
+        "thinking": "LOW",
+        "status": "completed",
+        "answer": "* **Northport Findings:** AI cannot publish public consultation summaries without human approval [1]. Whether AI can decide policy is not specified in the evidence [1]. Under the emergency exception, an urgent emergency alert may be published first without prior approval, but it must be reviewed by a human within 24 hours; this exception does not apply to budget decisions [1].\n* **Southport Findings:** AI cannot decide policy; it is used to cluster public comments, and a human officer must approve the resulting policy recommendations [2]. Whether AI can publish summaries without human review is not specified in the evidence [2]. The evidence does not specify any emergency exception for Southport [2].",
+        "first_text_ms": 1315.5,
+        "request_id": "64005fca476144f489ef8f1eb87f5d47",
+        "model_metrics": {
+          "input_tokens": 450,
+          "output_tokens": 137,
+          "thought_tokens": null,
+          "reason": "FinishReason.STOP"
+        },
+        "complete_ms": 2210.3,
+        "has_numeric_citation": true,
+        "requires_human_quality_review": true
+      },
+      {
+        "repeat": 0,
+        "case": 1,
+        "language": "zh-TW",
+        "profile": "brief_medium",
+        "detail": "brief",
+        "thinking": "MEDIUM",
+        "status": "completed",
+        "answer": "* **Northport**：規定每份 AI 生成的公眾諮詢摘要在發布前皆須經人工審核批准 [1]。緊急例外僅限於緊急警報可先行發布，但須於 24 小時內完成審核，且該例外不適用於預算決策 [1]。\n* **Southport**：規定 AI 整理後產出的政策建議須由承辦官員人工審核批准 [2]；資料中未載明任何緊急例外規定 [2]。\n* **Southport 代表性與預算**：2025 年雖有 1,200 人參與，但評估中並未衡量代表性，故無法證明具代表性 [2]；文件亦未提及專案預算金額 [2]。",
+        "first_text_ms": 7083.3,
+        "request_id": "8a200bab2e51420c9a3d9a6d9ce65e10",
+        "model_metrics": {
+          "input_tokens": 467,
+          "output_tokens": 172,
+          "thought_tokens": 915,
+          "reason": "FinishReason.STOP"
+        },
+        "complete_ms": 8594.9,
+        "has_numeric_citation": true,
+        "requires_human_quality_review": true
+      },
+      {
+        "repeat": 0,
+        "case": 1,
+        "language": "zh-TW",
+        "profile": "brief_low",
+        "detail": "brief",
+        "thinking": "LOW",
+        "status": "completed",
+        "answer": "- **Northport**：發布前必須由人工審查員批准每份 AI 生成的公眾諮詢摘要；唯一例外是緊急警報可先發布，但須在 24 小時內完成審查（此例外不適用於預算決策）[1]。\n- **Southport**：AI 用於公眾意見分群，政策建議產出後必須由官員審查批准；文件未載明任何緊急例外規定 [2]。\n- **Southport 代表性與預算**：雖有 1,200 人參與，但評估中未衡量代表性，因此無法證明其具代表性；文件亦未載明專案預算金額 [2]。\n\n**限制說明**：Southport 的例外情況與預算資訊在現有資料中並未載明 [2]。",
+        "first_text_ms": 1978.9,
+        "request_id": "1db2950394af4298ba36fa1a155e7517",
+        "model_metrics": {
+          "input_tokens": 467,
+          "output_tokens": 184,
+          "thought_tokens": null,
+          "reason": "FinishReason.STOP"
+        },
+        "complete_ms": 3671.5,
+        "has_numeric_citation": true,
+        "requires_human_quality_review": true
+      },
+      {
+        "repeat": 0,
+        "case": 1,
+        "language": "zh-TW",
+        "profile": "baseline",
+        "detail": "detailed",
+        "thinking": "MEDIUM",
+        "status": "completed",
+        "answer": "依據所提供的資料，針對兩座城市（Northport 與 Southport）的人工審核規定、緊急例外、代表性評估及預算金額說明如下：\n\n---\n\n### 一、 兩座城市的人工審核規定與緊急例外比較\n\n* **Northport**\n  * **人工審核規定【證據】**：在發布之前，必須由人工審核員審查並批准每一份由人工智慧生成的公眾諮詢摘要；且在將資料輸入人工智慧系統前，必須先移除個人資料 [1]。\n  * **緊急例外【證據】**：唯一的例外狀況為「緊急警報」（urgent emergency alert），該警報可先行發布，但必須在發布後 24 小時之內完成人工審核。此緊急例外規定不適用於預算決策 [1]。\n* **Southport**\n  * **人工審核規定【證據】**：使用人工智慧對公眾意見進行分群（分群結果不直接決定政策），後續所產生的政策建議必須由人工官員（human officer）審查並批准 [2]。\n  * **緊急例外【證據與限制】**：提供的文件中**未提及或規定** Southport 是否設有緊急例外條款 [2]。依據研究原則，未提及並不代表禁止，僅表示資料中並未規範。\n\n---\n\n### 二、 Southport 1,200 人參加能否證明具有代表性？\n\n* **事實證據**：Southport 在 2025 年共有 1,200 人參與 [2]。\n* **代表性分析【證據與推論】**：**不能證明具有代表性**。文件已明確指出，該評估並未衡量代表性（did not measure representativeness） [2]。因此，單純的參與人數（1,200 人）無法作為具備代表性的證據。\n\n---\n\n### 三、 預算金額\n\n* **事實證據**：文件中**並未記載**專案的預算金額 [2]。\n\n---\n\n### 四、 研究限制與注意事項（Limitations）\n\n1. **禁止規則外推**：Northport 的緊急例外處理程序（24 小時內補審）與事前去識別化要求，不得直接推論或套用於 Southport [1, 2]。\n2. **資料缺失限制**：本研究受限於現有文件，無法提供 Southport 的緊急處理規範、預算分配數據及參與者的母體代表性指標 [2]。",
+        "first_text_ms": 5311.6,
+        "request_id": "2d2a5dd2c9004acdbff78365c1001765",
+        "model_metrics": {
+          "input_tokens": 338,
+          "output_tokens": 545,
+          "thought_tokens": 885,
+          "reason": "FinishReason.STOP"
+        },
+        "complete_ms": 9668.2,
+        "has_numeric_citation": true,
+        "requires_human_quality_review": true
+      },
+      {
+        "repeat": 0,
+        "case": 2,
+        "language": "es",
+        "profile": "brief_low",
+        "detail": "brief",
+        "thinking": "LOW",
+        "status": "completed",
+        "answer": "* **Northport:** Exige que un revisor humano apruebe cada resumen de consulta pública generado por IA antes de su publicación [1].\n* **Southport:** Exige que un funcionario humano apruebe las recomendaciones de políticas resultantes del agrupamiento de comentarios por IA [2].\n* **Excepción de emergencia y presupuesto:** La única excepción de emergencia aplica a Northport: una alerta de emergencia urgente puede publicarse primero, pero debe revisarse dentro de las 24 horas (no aplica a decisiones presupuestarias) [1]. Para Southport, no se especifica ninguna excepción de emergencia [2]. No se conoce el presupuesto de Southport, ya que los documentos no indican un presupuesto para el proyecto [2].\n\n*Limitación:* La evidencia no evalúa la representatividad en Southport ni define reglas de emergencia para dicha ciudad [2].",
+        "first_text_ms": 1184.5,
+        "request_id": "e1d0282b8a784f67b4a88e8bf9c39e48",
+        "model_metrics": {
+          "input_tokens": 454,
+          "output_tokens": 177,
+          "thought_tokens": null,
+          "reason": "FinishReason.STOP"
+        },
+        "complete_ms": 2731.8,
+        "has_numeric_citation": true,
+        "requires_human_quality_review": true
+      },
+      {
+        "repeat": 0,
+        "case": 2,
+        "language": "es",
+        "profile": "baseline",
+        "detail": "detailed",
+        "thinking": "MEDIUM",
+        "status": "completed",
+        "answer": "A continuación se presenta el análisis comparativo basado exclusivamente en la evidencia provista:\n\n### 1. Comparación de la revisión humana entre ambas ciudades\n* **Northport (Evidencia):** Requiere obligatoriamente que un revisor humano apruebe todo resumen de consulta pública generado por IA antes de que sea publicado [1].\n* **Southport (Evidencia):** Utiliza la IA para agrupar comentarios públicos (lo cual no toma decisiones de política), y exige que un funcionario humano apruebe las recomendaciones de políticas resultantes [2].\n\n### 2. Excepción de emergencia\n* **Northport (Evidencia y alcance):** La única excepción a la revisión previa obligatoria es una alerta de emergencia urgente, la cual puede publicarse antes de la revisión, pero debe ser revisada obligatoriamente en un plazo máximo de 24 horas [1].\n* **Excepción de la excepción (Northport):** Esta regla de emergencia no es aplicable a decisiones presupuestarias [1].\n* **Southport (No especificado):** En la documentación de Southport no se especifica ninguna excepción de emergencia [2]. (Nota: que no esté especificada no constituye una prohibición explícita, simplemente no se menciona).\n\n### 3. Presupuesto de Southport\n* **Evidencia:** No se conoce el presupuesto de Southport; los documentos indican explícitamente que no se establece el presupuesto del proyecto [2].\n\n---\n\n### Distinciones analíticas y limitaciones\n* **Limitaciones de los datos:** \n  * En Southport, la evaluación no midió la representatividad de los 1200 participantes registrados en 2025 [2].\n  * La regla de excepción de emergencia de Northport aplica únicamente a sus alertas y no se puede generalizar a Southport [1, 2].\n* **Inferencia / Observación:** Ambas ciudades mantienen un control humano final sobre los resultados de la IA en sus respectivos procesos antes de la adopción o publicación definitiva, variando el objeto revisado (resúmenes de consultas en Northport frente a recomendaciones de políticas en Southport) [1, 2].",
+        "first_text_ms": 9639.2,
+        "request_id": "33acc676338e49bd8afe51bba1432371",
+        "model_metrics": {
+          "input_tokens": 325,
+          "output_tokens": 453,
+          "thought_tokens": 939,
+          "reason": "FinishReason.STOP"
+        },
+        "complete_ms": 13424.4,
+        "has_numeric_citation": true,
+        "requires_human_quality_review": true
+      },
+      {
+        "repeat": 0,
+        "case": 2,
+        "language": "es",
+        "profile": "brief_medium",
+        "detail": "brief",
+        "thinking": "MEDIUM",
+        "status": "completed",
+        "answer": "* **Northport**: Requiere que un revisor humano apruebe cada resumen de consulta pública generado por IA antes de su publicación [1]. Su única excepción de emergencia permite publicar primero una alerta de emergencia urgente, con la condición de ser revisada dentro de las 24 horas posteriores (esta excepción no aplica a decisiones presupuestarias) [1].\n* **Southport**: Exige que un funcionario humano apruebe las recomendaciones de políticas derivadas de la agrupación de comentarios realizada por IA [2]. No se especifica ninguna excepción de emergencia en sus directrices [2].\n* **Presupuesto de Southport**: No se conoce; la evidencia indica explícitamente como limitación que los documentos no detallan el presupuesto del proyecto [2].",
+        "first_text_ms": 4718.7,
+        "request_id": "e803cecff3724d20aa39060633af506c",
+        "model_metrics": {
+          "input_tokens": 454,
+          "output_tokens": 155,
+          "thought_tokens": 777,
+          "reason": "FinishReason.STOP"
+        },
+        "complete_ms": 6088.4,
+        "has_numeric_citation": true,
+        "requires_human_quality_review": true
+      },
+      {
+        "repeat": 0,
+        "case": 3,
+        "language": "ja",
+        "profile": "baseline",
+        "detail": "detailed",
+        "thinking": "MEDIUM",
+        "status": "completed",
+        "answer": "都市AIガバナンス研究者の観点から、提供された証拠に基づき以下のように回答します。\n\n### 1. 人による審査と緊急時の例外の比較\n\n* **証拠（Evidence）**:\n  * **Northport**: 公開前に、AIが生成したすべてのパブリックコンサルテーション要約を人間のレビュー担当者が承認する必要があります [1]。また、AIへの入力前に個人データを削除することが義務付けられています [1]。緊急時の例外として唯一認められているのは「緊急警報（urgent emergency alert）」であり、これは先に公開することが可能ですが、公開後24時間以内にレビューを実施する必要があります [1]。ただし、この例外は予算決定には適用されません [1]。\n  * **Southport**: パブリックコメントのクラスタリングにAIを使用していますが、クラスタリング自体は政策を決定しません [2]。AIクラスタリングから得られた政策提言は、人間の担当官が承認する必要があります [2]。Southportにおける緊急時の例外規定については、提供された文書に記載がありません（指定されていません） [2]。\n* **限界事項（Limitations）**:\n  * Southportの文書に緊急時の例外規定が記載されていないことは、例外の存在を禁止または否定するものではなく、単にポリシー上の規定が明記されていない状態を示しています [2]。また、ある都市（Northport）の緊急時ルールをもう一方の都市（Southport）に適用・一般化することはできません。\n\n### 2. Southport の参加者数と代表性について\n\n* **証拠（Evidence）**:\n  * Southportの2025年の参加者数は1,200人でした [2]。\n  * 実施された評価において、代表性は測定されませんでした [2]。\n* **推論（Inference） / 限界事項（Limitations）**:\n  * 参加者数（1,200人）という規模のみから代表性を証明することはできません [2]。評価自体で代表性が測定されていないため、参加者の構成や偏りに関するデータが不足しています [2]。\n\n### 3. 予算について\n\n* **証拠（Evidence）**:\n  * **Southport**: プロジェクト予算は提供された文書に記載されていません（明確に記載なし） [2]。\n  * **Northport**: 予算額に関する具体的な数値や情報は提供された文書に指定されていません [1]。",
+        "first_text_ms": 5155.8,
+        "request_id": "c7cc0114e95444959d82c2245c5e200e",
+        "model_metrics": {
+          "input_tokens": 332,
+          "output_tokens": 504,
+          "thought_tokens": 593,
+          "reason": "FinishReason.STOP"
+        },
+        "complete_ms": 9289.1,
+        "has_numeric_citation": true,
+        "requires_human_quality_review": true
+      },
+      {
+        "repeat": 0,
+        "case": 3,
+        "language": "ja",
+        "profile": "brief_medium",
+        "detail": "brief",
+        "thinking": "MEDIUM",
+        "status": "completed",
+        "answer": "Northportでは公開前に人間によるAI生成要約の承認が必須であり、緊急アラートのみ即時公開後に24時間以内の審査が認められますが、これは予算決定には適用されません [1]。SouthportではAIクラスタリングに基づく政策提言に人間の職員による承認が必要ですが、緊急時の例外規定は明記されていません [2]。\n\n* **代表性**：Southportの2025年の参加者は1200人ですが、評価において代表性が測定されていないため、参加者数から代表性を証明することはできません [2]。\n* **予算**：Southportのプロジェクト予算は記載されておらず [2]、Northportの予算額についても明記されていません [1]。",
+        "first_text_ms": 6099.2,
+        "request_id": "544cadda382544c781a2808ec0f45bf5",
+        "model_metrics": {
+          "input_tokens": 461,
+          "output_tokens": 154,
+          "thought_tokens": 625,
+          "reason": "FinishReason.STOP"
+        },
+        "complete_ms": 7550.7,
+        "has_numeric_citation": true,
+        "requires_human_quality_review": true
+      },
+      {
+        "repeat": 0,
+        "case": 3,
+        "language": "ja",
+        "profile": "brief_low",
+        "detail": "brief",
+        "thinking": "LOW",
+        "status": "completed",
+        "answer": "* **Northport**: 公開前に人間の審査員がAI生成のパブリックコンサルテーション要約を承認する必要があります。例外として緊急警報のみ事後24時間以内の審査で即時公開が認められますが、予算決定には適用されません [1]。\n* **Southport**: AIによる意見クラスタリング後の政策提言に対して担当官の承認が必要です [2]。緊急時の例外規定は記載されていません（未指定） [2]。\n* **Southportの代表性と予算**: 2025年の参加者数は1200人ですが、評価で代表性は測定されておらず証明できません [2]。また、プロジェクト予算は記載されていません [2]。",
+        "first_text_ms": 1333.9,
+        "request_id": "79f8b2903a5643cea39a5fc2808e731d",
+        "model_metrics": {
+          "input_tokens": 461,
+          "output_tokens": 149,
+          "thought_tokens": null,
+          "reason": "FinishReason.STOP"
+        },
+        "complete_ms": 2504.7,
+        "has_numeric_citation": true,
+        "requires_human_quality_review": true
+      }
+    ],
+    "limitations": "Model-only benchmark, small sample; excludes search, DB, network-to-browser and Cloud Run cold start. Human quality review required."
+  },
+  "earlierEvaluation": {
+    "summary": {
+      "baseline": {
+        "successes": 8,
+        "runs": 8,
+        "median_first_text_ms": 6563.1,
+        "median_complete_ms": 10402.150000000001
+      },
+      "brief_medium": {
+        "successes": 8,
+        "runs": 8,
+        "median_first_text_ms": 6690.25,
+        "median_complete_ms": 8022.4
+      },
+      "brief_low": {
+        "successes": 7,
+        "runs": 8,
+        "median_first_text_ms": 1545.4,
+        "median_complete_ms": 3346.2
+      }
+    },
+    "failures": [
+      {
+        "repeat": 0,
+        "case": 1,
+        "language": "zh-TW",
+        "profile": "brief_low",
+        "detail": "brief",
+        "thinking": "LOW",
+        "status": "failed",
+        "answer": "",
+        "failure_kind": "ReadTimeout",
+        "request_id": "7057576caa2e46f880a8a57e2b487527",
+        "model_metrics": {},
+        "complete_ms": 120070.3,
+        "has_numeric_citation": false,
+        "requires_human_quality_review": true
+      }
+    ],
+    "note": "Earlier brief prompt had overbroad introductory claims; corrected before acceptance."
+  },
+  "recheck": {
+    "baseline": {
+      "successes": 4,
+      "runs": 4,
+      "median_first_text_ms": 7910.7,
+      "median_complete_ms": 11710.15
+    },
+    "brief_medium": {
+      "successes": 4,
+      "runs": 4,
+      "median_first_text_ms": 6468.450000000001,
+      "median_complete_ms": 8002.35
+    },
+    "brief_low": {
+      "successes": 4,
+      "runs": 4,
+      "median_first_text_ms": 1301.05,
+      "median_complete_ms": 3512.8
+    }
+  },
+  "browserBaseline": {
+    "question": "What is Bogotá's Chatico and what does it do?",
+    "server_first_text_ms": 9237,
+    "server_complete_ms": 13021,
+    "preparation_ms": 3715,
+    "generation_ms": 9280
+  },
+  "qualityReview": {
+    "reviewedProfile": "brief_low",
+    "languages": [
+      "en",
+      "zh-TW",
+      "es",
+      "ja"
+    ],
+    "checked": [
+      "Numeric citations",
+      "Per-city scope and missing rules",
+      "24-hour emergency review",
+      "Budget-decision exception exclusion",
+      "No invented project budget",
+      "Participation count does not prove representativeness"
+    ],
+    "limitations": "Small synthetic sample; no p95 or SLA. Earlier model-call ReadTimeout retained."
+  },
+  "deployedRevision": "city-rag-backend-dev-b-2893ddc4-6cca-454b-826c-f5b1ec513943",
+  "liveTraceSummaries": [
+    {
+      "status": "completed",
+      "request_id": "7dd43605d49f4ffbb3dbc6c0589d7778",
+      "stages": {
+        "retrieval": 3059.06,
+        "legacy_passage_matching": 0,
+        "conversation_checkpoint": 15.31,
+        "evidence_prompt": 0.52,
+        "context_rewrite": 0.2,
+        "managed_remote": 2527.09,
+        "legacy_search": 2988.24,
+        "legacy_catalog_lookup": 13.69,
+        "model_first_text": 1792.22,
+        "conversation_finish": 53.65,
+        "conversation_begin": 44.22,
+        "model_client_setup": 298.38,
+        "language_resolution": 1337.25,
+        "managed_result_verification": 35.72,
+        "managed_search": 3042.94,
+        "model_generation": 3179.27,
+        "authentication": 9.8,
+        "managed_catalog_permissions": 436.83
+      },
+      "event": "rag_request",
+      "total_ms": 8030.82
+    },
+    {
+      "total_ms": 7512.47,
+      "event": "rag_request",
+      "request_id": "8530d6b28e0b45129fb4f3085c424c0c",
+      "status": "completed",
+      "stages": {
+        "conversation_checkpoint": 23.17,
+        "legacy_passage_matching": 0.07,
+        "conversation_finish": 40.72,
+        "retrieval": 2542.91,
+        "legacy_search": 2068.31,
+        "managed_remote": 2209.13,
+        "legacy_catalog_lookup": 14.14,
+        "conversation_begin": 35.09,
+        "model_generation": 3817.45,
+        "authentication": 13.23,
+        "managed_catalog_permissions": 35.23,
+        "managed_search": 2526.5,
+        "model_first_text": 1413.69,
+        "context_rewrite": 1018.34,
+        "language_resolution": 0.2,
+        "evidence_prompt": 0.43,
+        "managed_result_verification": 263.43
+      }
+    },
+    {
+      "status": "completed",
+      "request_id": "b7e342ac01464b109202e67433a0bcc6",
+      "stages": {
+        "managed_search": 2381.37,
+        "conversation_finish": 40.97,
+        "model_first_text": 1498.83,
+        "authentication": 8.84,
+        "retrieval": 2394.62,
+        "legacy_passage_matching": 0,
+        "legacy_search": 2175.19,
+        "conversation_checkpoint": 13.48,
+        "language_resolution": 3.67,
+        "legacy_catalog_lookup": 11.46,
+        "managed_catalog_permissions": 28.35,
+        "managed_remote": 2314.4,
+        "model_client_setup": 15.96,
+        "conversation_begin": 22.61,
+        "model_generation": 5690.28,
+        "evidence_prompt": 0.44,
+        "managed_result_verification": 22.81,
+        "context_rewrite": 990.82
+      },
+      "event": "rag_request",
+      "total_ms": 9183.31
+    },
+    {
+      "request_id": "6a7e1353ba1c4b5bb64e34901e3da050",
+      "stages": {
+        "legacy_catalog_lookup": 25.12,
+        "language_resolution": 0.19,
+        "managed_result_verification": 113.75,
+        "conversation_checkpoint": 21.71,
+        "context_rewrite": 1027.08,
+        "conversation_begin": 34.68,
+        "model_first_text": 1230.59,
+        "managed_catalog_permissions": 53.7,
+        "authentication": 12.39,
+        "evidence_prompt": 0.35,
+        "model_generation": 2884.13,
+        "managed_remote": 2386.34,
+        "legacy_search": 2261.24,
+        "managed_search": 2573.21,
+        "legacy_passage_matching": 0.07,
+        "conversation_finish": 60.09,
+        "retrieval": 2600.86
+      },
+      "event": "rag_request",
+      "total_ms": 6675.55,
+      "status": "completed"
+    }
+  ],
+  "livePipelineComparison": [
+    "rag_complete_ms=7918 generation_ms=3478 sources=7",
+    "rag_first_text_ms=1792 total_first_text_ms=6232"
+  ],
+  "liveClientTimings": [
+    {
+      "request_id": "7dd43605d49f4ffbb3dbc6c0589d7778",
+      "first_text_ms": 6735.4,
+      "ready_ms": 8456.1,
+      "last_text_to_ready_ms": 580.2
+    },
+    {
+      "request_id": "b7e342ac01464b109202e67433a0bcc6",
+      "first_text_ms": 5059.3,
+      "ready_ms": 9233.8,
+      "last_text_to_ready_ms": 302.7
+    },
+    {
+      "request_id": "8530d6b28e0b45129fb4f3085c424c0c",
+      "first_text_ms": 5278.5,
+      "ready_ms": 7577.2,
+      "last_text_to_ready_ms": 540.5
+    },
+    {
+      "request_id": "6a7e1353ba1c4b5bb64e34901e3da050",
+      "first_text_ms": 5036.7,
+      "ready_ms": 6890.3,
+      "last_text_to_ready_ms": 728.1
+    }
+  ]
+}

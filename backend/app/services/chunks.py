@@ -144,8 +144,15 @@ def publish(document_id, revision, rollback=False, reviewed_diff=None):
         doc.index_status = 'pending'
         db.add_all([publication, job])
         db.commit()
+        from app.services import audit
         from app.services.jobs import describe, dispatch_job
         dispatch_job(job)
+        audit.record(
+            'document.rollback' if rollback else 'document.published',
+            actor=user.email,
+            target=document_id,
+            details={'version': version, 'previous_version': publication.previous_version, 'chunks_count': len(chunks)},
+        )
         return describe(job)
 
 
@@ -201,6 +208,27 @@ def search_publication(publication, checkpoint_fn=None):
         if not page_token:break
         if page_token in seen_tokens:raise ValueError('Search repeated its pagination token')
         seen_tokens.add(page_token)
+    # Equal-ranked results can repeat across provider pages, hiding a few IDs.
+    # Query the missing IDs explicitly; publication still requires every hash.
+    missing=[c['id'] for c in publication.chunks if index_id(publication,c) not in found]
+    for offset in range(0,len(missing),100):
+        identifiers=missing[offset:offset+100]
+        page_token='';seen_tokens=set()
+        expression=('publication_key: ANY('+json.dumps(publication.index_document_id)+') AND '
+                    'chunk_id: ANY('+','.join(json.dumps(i) for i in identifiers)+')')
+        while True:
+            if checkpoint_fn:checkpoint_fn()
+            response=cloud.request(cloud.search_path(),{
+                'query':'','pageSize':100,'pageToken':page_token,'filter':expression,
+                'contentSearchSpec':{'searchResultMode':'DOCUMENTS'}},'POST')
+            for item in response.get('results',[]):
+                remote=item.get('document',{})
+                found[remote.get('id')]=remote
+            if len(found)>MAX_PUBLICATION_CHUNKS:raise ValueError('Unexpected publication document count')
+            page_token=response.get('nextPageToken')
+            if not page_token:break
+            if page_token in seen_tokens:raise ValueError('Search repeated its pagination token')
+            seen_tokens.add(page_token)
     return found
 
 
@@ -303,6 +331,8 @@ def run_publication(job):
                 raise ValueError('Document publishing permission revoked')
             active.published_version,active.index_status=pub.version,'indexed'
             publication.status,publication.error='published',None
+            from app.services.translations import ensure as ensure_translations
+            ensure_translations(db, active, publication)
             completed=dict(document_id=doc.id,published_version=pub.version,verified_chunks=len(pub.chunks),index_format='chunk-documents-v1')
             active_job.status,active_job.progress,active_job.result='completed',100,completed
             active_job.revision,active_job.updated_at=active_job.revision+1,time.time()
@@ -340,6 +370,8 @@ def indexed(document_id):
 
 
 def search(query, city=None, languages=None):
+    from app.services import rag_timing
+    started=time.monotonic()
     if not settings.CHUNK_INDEX_ENABLED or not settings.CHUNK_DATA_STORE_ID:return []
     user=require_user()
     if user.role is None:user=allowed_user(user)
@@ -352,6 +384,7 @@ def search(query, city=None, languages=None):
                 load_only(store.Publication.id,store.Publication.document_id,store.Publication.version,store.Publication.index_document_id)))
             if documents.can_read(d,user) and (p.index_document_id or '').startswith('cad-')
             and (not city or d.metadata_json.get('city')==city) and (not languages or d.language in languages)}
+    rag_timing.record_since('managed_catalog_permissions',started,eligible_publications=len(eligible))
     if not eligible:return []
     # Scope before ranking; a result page size is not a corpus size limit.
     # Bound filter bytes for larger corpora, rather than imposing 25 sources.
@@ -365,8 +398,9 @@ def search(query, city=None, languages=None):
     if group:groups.append(group)
     def fetch(keys):
         scope='publication_key: ANY('+', '.join(json.dumps(k) for k in keys)+')'
-        return cloud.request(cloud.search_path(),{'query':query,'pageSize':30,'filter':scope,
-            'contentSearchSpec':{'searchResultMode':'DOCUMENTS'}},'POST').get('results',[])
+        with rag_timing.span('managed_remote'):
+            return cloud.request(cloud.search_path(),{'query':query,'pageSize':30,'filter':scope,
+                'contentSearchSpec':{'searchResultMode':'DOCUMENTS'}},'POST').get('results',[])
     if len(groups)==1:pages=[fetch(groups[0])]
     else:
         with ThreadPoolExecutor(max_workers=4) as pool:
@@ -374,6 +408,7 @@ def search(query, city=None, languages=None):
             pages=[future.result() for future in futures]
     ranked=[(rank,item) for page in pages for rank,item in enumerate(page)]
     results=[];seen=set()
+    verification_started=time.monotonic()
     with store.session() as db:
         current_docs={};current_pubs={}
         for rank,item in sorted(ranked,key=lambda pair:pair[0]):
@@ -402,4 +437,5 @@ def search(query, city=None, languages=None):
                 page_start=min(pages) if pages else None,page_end=max(pages) if pages else None,
                 metadata={'document_id':doc.id,'language':doc.language,'version':pub.version}))
             if len(results)==30:break
+    rag_timing.record_since('managed_result_verification',verification_started,result_count=len(results))
     return results

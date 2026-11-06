@@ -88,3 +88,22 @@ test('Components do not introduce hardcoded visible labels or confirmation messa
   }
   assert.deepEqual(violations,[]);
 });
+const {TranslationPassages} = require('../src/components/TranslationPassages.tsx');
+for (const lang of Object.keys(INTERFACE_LANGUAGES)) {
+  test(`${lang}: saved translations distinguish waiting, running and failed chunks`, () => {
+    const chunks = [
+      {chunk_id:'ready',original:'Original 20',text:'Translated 20',status:'completed',refs:[]},
+      {chunk_id:'queued',original:'Next passage',text:null,status:'queued',refs:[]},
+      {chunk_id:'running',original:'Active passage',text:null,status:'running',refs:[]},
+      {chunk_id:'failed',original:'Failed passage',text:null,status:'failed',error:'numbers_mismatch',refs:[]},
+    ];
+    const html=render(lang,TranslationPassages,{result:{version:2,chunks}});
+    for (const key of ['translationWaiting','translationRunning','translationFailed','translationNumbers'])
+      assert.ok(html.includes(escaped(panelText(lang,key))),`${lang}/${key}`);
+    assert.ok(html.includes('Translated 20'));
+    assert.ok(html.includes('Original 20'));
+    const failed=render(lang,TranslationPassages,{result:{version:2,chunks:[chunks[3]]}});
+    assert.ok(!failed.includes(escaped(panelText(lang,'translationRunning'))));
+    assert.ok(!failed.includes(escaped(panelText(lang,'translationPartial'))));
+  });
+}

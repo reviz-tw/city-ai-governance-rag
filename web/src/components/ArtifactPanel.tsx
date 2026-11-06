@@ -73,7 +73,8 @@ export function JobView({id, onClose}: {id: string; onClose: () => void}) {
       {job.kind === 'translation' && job.draft && <>
         <p>{t('translationNote')}</p>
         {job.draft.complete&&<p>{t('translationComplete')}</p>}
-        {!job.draft.complete && <p>{t('translationPartial')}</p>}
+        {!job.draft.complete && <p>{t(['failed','cancelled'].includes(job.status)?'translationFailed':'translationPartial')}</p>}
+        <p>{t('translationLegacy')}</p>
         {job.draft.source_versions?.map((s:any)=><p key={s.id}><a href={`/api/library/${s.id}/original`}>{s.title} · {t('original')}</a><small> · {s.version.slice(0,12)}</small></p>)}
         {job.draft.blocks?.map((b: any) => <div className="parallel-text" key={b.id}><div dir="auto"><small>{b.id} · {b.page ?? '—'}</small><BlockText text={b.original} cells={b.original_cells}/></div><div dir="auto"><BlockText text={b.text} cells={b.cells}/>{b.ambiguity && <p>{b.ambiguity}</p>}</div></div>)}
       </>}
@@ -84,7 +85,7 @@ export function JobView({id, onClose}: {id: string; onClose: () => void}) {
         {file.mime === 'application/pdf' && <iframe title={file.name} src={`/api/artifacts/${id}/download/${encodeURIComponent(file.name)}?inline=true`} width="100%" height="520"/>}
       </div>)}
       {!['completed','failed','cancelled'].includes(job.status) && <button onClick={() => act('cancel')}>{t('cancelTask')}</button>}
-      {['failed','cancelled'].includes(job.status) && <button onClick={() => act('retry')}>{t('retry')}</button>}
+      {job.kind!=='translation'&&['failed','cancelled'].includes(job.status) && <button onClick={() => act('retry')}>{t('retry')}</button>}
       <button onClick={async () => {try {await api(`/api/artifacts/${id}`, {method:'DELETE'}); onClose();} catch (err: any) {setError(errorText(err));}}}>{t('deleteTask')}</button>
     </>}
   </WorkspacePanel>;

@@ -90,12 +90,19 @@ def create_governance_slides(scope: str, message_ids: list[str], source_ids: lis
 @mcp.tool()
 def translate_governance_document(document_id: str, target_language: str, mode: str,
                                     block_ids: Optional[list[str]] = None,
-                                    acknowledge_extraction_limits: bool = False) -> str:
-    """Translate an authorized original document in passage or document mode; never overwrite/index the translation.
-    Full translation may fail if OCR is required. Outputs are AI-assisted, not official translations.
+                                    acknowledge_extraction_limits: bool = False,
+                                    chunk_ids: Optional[list[str]] = None, version: Optional[int] = None) -> str:
+    """Read/queue durable local-model translations of published chunks. Repeat to check progress.
+    passage requires chunk_ids or original block_ids; document selects the published document.
+    Returns original/translated chunks with independent statuses, not an expiring artifact job.
+    Source access is rechecked every time. Outputs are AI-assisted, not official translations.
     """
-    return output(jobs.create(ArtifactRequest(kind='translation', scope=mode, source_ids=[document_id],
-        language=target_language, block_ids=block_ids or [], acknowledge_extraction_limits=acknowledge_extraction_limits)))
+    from app.services import translations
+    if mode not in {'passage','document'} or (mode=='passage' and not (chunk_ids or block_ids)):
+        raise ValueError('Select passage IDs or use document mode')
+    return output(translations.read(document_id,target_language,version=version,
+        chunk_ids=chunk_ids if mode=='passage' else None,
+        block_ids=block_ids if mode=='passage' else None,enqueue=True))
 
 @mcp.tool()
 def read_governance_document(document_id: str) -> str:

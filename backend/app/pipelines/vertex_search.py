@@ -22,6 +22,16 @@ logger = logging.getLogger(__name__)
 class SearchUnavailable(RuntimeError):
     pass
 
+
+class SourcePreparationPending(RuntimeError):
+    pass
+
+
+class RetrievalResults(list):
+    def __init__(self, values, pending_source_count=0):
+        super().__init__(values)
+        self.pending_source_count = pending_source_count
+
 def upload_document_to_gcs(
     file_bytes: bytes,
     file_name: str,
@@ -269,18 +279,6 @@ def search_gcs_documents_fallback(query: str, top_k: int = 4, city_filter=None, 
 
 
 
-def build_filter(city=None, languages=None):
-    parts = []
-    if city:
-        parts.append(f'city: ANY({json.dumps(city, ensure_ascii=False)})')
-    languages = source_languages(languages)
-    if languages:
-        # Old metadata used zh for Traditional Chinese.
-        values = languages + (["zh"] if "zh-TW" in languages else [])
-        parts.append('language: ANY(' + ', '.join(json.dumps(v) for v in values) + ')')
-    return ' AND '.join(parts) or None
-
-
 def diversify_results(managed, legacy):
     """Interleave stores and prioritize distinct documents, preserving local rank."""
     combined=[]
@@ -301,11 +299,17 @@ def retrieve(query, city=None, languages=None):
     started=time.monotonic()
     def managed_search():
         start=time.monotonic()
-        try: return chunks.search(query, city, languages)
+        try:
+            with rag_timing.span('managed_search'):
+                return chunks.search(query, city, languages)
         finally: logger.info('rag_managed_search_ms=%s',int((time.monotonic()-start)*1000))
     def legacy_search():
         start=time.monotonic()
-        try: return search_vertex_data_store(query, filter_expr=build_filter(city, languages))
+        # The historical content-only store has no filterable city/language fields.
+        # Apply explicit scope to the authorized catalogue records below instead.
+        try:
+            with rag_timing.span('legacy_search'):
+                return search_vertex_data_store(query, page_size=30 if city or languages else 5)
         finally: logger.info('rag_legacy_search_ms=%s',int((time.monotonic()-start)*1000))
     try:
         with ThreadPoolExecutor(max_workers=2) as pool:
@@ -317,14 +321,20 @@ def retrieve(query, city=None, languages=None):
     logger.info('rag_search_ms=%s managed_results=%s legacy_results=%s',int((time.monotonic()-started)*1000),len(managed),len(results))
     from app.services import documents
     legacy = []
+    with rag_timing.span('legacy_catalog_lookup'):
+        records, pending = documents.legacy_catalog_records(results)
+    enrichment_started = time.monotonic()
     for result in results:
         try:
-            identifier = documents.register_legacy(result)
-            if not identifier:
+            identifier = documents.legacy_identifier(result)
+            doc = records.get(identifier)
+            if doc is None:
                 continue
-            doc = documents.get(identifier)
-            if doc.published_version:
-                continue  # A migrated document must never surface stale legacy snippets.
+            if city and doc.metadata_json.get('city') != city:
+                continue
+            if languages and doc.language not in languages:
+                continue
+            result['title'] = doc.title
             result['metadata'] = {**result.get('metadata',{}), 'document_id':identifier,
                                   'language':doc.language,'version':doc.original_hash}
             snippet = ' '.join(s.get('snippet', '') for s in result.get('snippets', []) if isinstance(s, Mapping))
@@ -337,7 +347,8 @@ def retrieve(query, city=None, languages=None):
             logger.warning('source_unavailable kind=%s',type(exc).__name__)
     # Interleave independently ranked stores; then give each document a turn
     # before including additional chunks from the same document.
-    return diversify_results(managed,legacy)
+    rag_timing.record_since('legacy_passage_matching', enrichment_started, pending_sources=pending)
+    return RetrievalResults(diversify_results(managed,legacy), pending)
 
 
 def prepare_rag(query, city_filter=None, response_language='auto', interface_language=None,
@@ -351,8 +362,16 @@ def prepare_rag(query, city_filter=None, response_language='auto', interface_lan
     with rag_timing.span('language_resolution'):
         language = resolve(query, response_language, interface_language,
                            context['preferred_language'], context['recent_languages'])
+    # A city inferred from a question is a search term, not a document tag.
+    # Cross-city reports may have no city tag and must remain searchable.
+    retrieval_query = context['retrieval_query']
+    if context['city'] and context['city'].casefold() not in retrieval_query.casefold():
+        retrieval_query = clip(retrieval_query, 1800) + '\n' + context['city']
     with rag_timing.span('retrieval'):
-        results = retrieve(context['retrieval_query'], context['city'], source_languages)
+        results = retrieve(retrieval_query, city_filter, source_languages)
+    pending = getattr(results, 'pending_source_count', 0)
+    if pending and not results:
+        raise SourcePreparationPending('Historical sources are being prepared')
     evidence_started = time.monotonic()
     blocks, sources, seen = [], [], set()
     budget = settings.CONTEXT_EVIDENCE_TOKENS
@@ -389,6 +408,8 @@ def prepare_rag(query, city_filter=None, response_language='auto', interface_lan
               'Keep source titles, proper names and necessary verbatim quotations in their original language. '
               'Do not add an English version unless the requested answer language is English.')
     system += answer_style(answer_detail)
+    if pending:
+        system += ' Some historical sources await preparation; explicitly state that the evidence set is incomplete.'
     contents = json.dumps(dict(question=query, history=context['history'], summary=context['summary'],
                                evidence=blocks), ensure_ascii=False)
     style_reserve = max(len(answer_style(d).encode('utf-8')) for d in ('brief','detailed')) + 600 if answer_detail=='progressive' else 0
@@ -397,9 +418,11 @@ def prepare_rag(query, city_filter=None, response_language='auto', interface_lan
         contents=json.dumps(dict(question=query,history=context['history'],summary=context['summary'],evidence=blocks),ensure_ascii=False)
     if style_reserve + len((system+contents).encode('utf-8')) > settings.CONTEXT_INPUT_TOKENS:
         raise ValueError('Context exceeds configured input budget')
+    if pending and not sources:
+        raise SourcePreparationPending('Historical sources are being prepared')
     metadata = dict(response_language=language.language, language_source=language.source,
                     model_used=settings.GEMINI_CHAT_MODEL if sources else '', context_summary=context['summary'],
-                    context_city=context['city'], answer_detail=answer_detail,
+                    context_city=context['city'], answer_detail=answer_detail, pending_source_count=pending,
                     request_id=rag_timing.current().request_id if rag_timing.current() else None)
     rag_timing.record_since('evidence_prompt', evidence_started, source_count=len(sources))
     return system, contents, sources, metadata
@@ -462,6 +485,15 @@ SEARCH_ERRORS = {
  'de':'Der Suchdienst ist vorübergehend nicht verfügbar. Bitte versuchen Sie es erneut.'}
 
 
+PREPARATION_ERRORS = {
+ 'zh-TW':'部分歷史來源仍在背景準備中，請稍後重試。', 'zh-CN':'部分历史来源仍在后台准备中，请稍后重试。',
+ 'en':'Some historical sources are still being prepared in the background. Please retry later.',
+ 'ja':'一部の過去資料をバックグラウンドで準備中です。後でもう一度お試しください。',
+ 'fr':'Certaines sources historiques sont en préparation. Réessayez plus tard.',
+ 'es':'Algunas fuentes históricas se están preparando. Inténtalo más tarde.',
+ 'ru':'Некоторые исторические источники ещё готовятся. Повторите попытку позже.',
+ 'ko':'일부 과거 자료를 준비 중입니다. 나중에 다시 시도해 주세요.',
+ 'de':'Einige historische Quellen werden noch vorbereitet. Bitte später erneut versuchen.'}
 FULL_ANSWER_ERRORS = {
  'zh-TW':'完整回答未能完成，以上短答與來源已保留。請稍後重試。',
  'zh-CN':'完整回答未能完成，以上短答与来源已保留。请稍后重试。',
@@ -528,7 +560,8 @@ def stream_city_governance_rag_vertex(query, city_filter=None, response_language
         logger.warning('retrieval_preparation_failed kind=%s',type(exc).__name__)
         language=resolve(query,response_language,interface_language).language
         rag_timing.failed()
-        message=SEARCH_ERRORS[language] if isinstance(exc,SearchUnavailable) else ERROR_MESSAGES[language]
+        message=(PREPARATION_ERRORS[language] if isinstance(exc,SourcePreparationPending)
+                 else SEARCH_ERRORS[language] if isinstance(exc,SearchUnavailable) else ERROR_MESSAGES[language])
         yield event(dict(type='error',message=message,partial=False))
         yield event(dict(type='done',status='failed'))
         return

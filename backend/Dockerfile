@@ -44,6 +44,10 @@ RUN PYTHONPATH=/app pytest -q tests
 
 # Copy compiled React frontend bundle to backend static web_dist
 COPY --from=web-builder /build/web/dist ./app/web_dist
+RUN useradd --create-home --shell /usr/sbin/nologin appuser \
+    && chown -R appuser:appuser /app
+
+USER appuser
 
 EXPOSE 8080
 

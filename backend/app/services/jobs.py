@@ -139,6 +139,8 @@ def mutate(job_id, action, revision, draft=None):
                 document=db.get(store.Document,publication.document_id)
                 document.index_status='indexed' if document.published_version else 'unpublished'
         elif action == 'retry':
+            if job.kind == 'translation':
+                raise HTTPException(409, 'Reopen the source reader to use persistent chunk translations')
             if job.status not in {'failed', 'cancelled'} or job.payload.get('retry_count',0) >= 3:
                 raise HTTPException(409, 'This task cannot be retried')
             # Revalidate permissions and source versions before any new model call.

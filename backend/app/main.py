@@ -60,7 +60,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url=None if settings.ENVIRONMENT == 'production' else '/docs',
+    redoc_url=None if settings.ENVIRONMENT == 'production' else '/redoc',
+    openapi_url=None if settings.ENVIRONMENT == 'production' else '/openapi.json',
 )
 
 # CORS Middleware
@@ -104,13 +107,17 @@ class UnifiedMCPApp:
         # 處理 CORS preflight OPTIONS 請求
         if method == "OPTIONS":
             from starlette.responses import Response
+            origin = next((v.decode("latin1", errors="ignore") for k, v in scope.get("headers", []) if k.lower() == b"origin"), "")
+            cors_headers = {
+                "access-control-allow-methods": "GET, POST, OPTIONS, DELETE, HEAD",
+                "access-control-allow-headers": "Authorization, Content-Type, Accept",
+            }
+            if origin in settings.ALLOWED_ORIGINS:
+                cors_headers["access-control-allow-origin"] = origin
+                cors_headers["vary"] = "Origin"
             res = Response(
                 status_code=200,
-                headers={
-                    "access-control-allow-origin": "*",
-                    "access-control-allow-methods": "GET, POST, OPTIONS, DELETE, HEAD",
-                    "access-control-allow-headers": "*",
-                }
+                headers=cors_headers
             )
             await res(scope, receive, send)
             return
@@ -295,14 +302,17 @@ def verify_worker(request: Request):
         if claims.get('email') != settings.WORKER_SERVICE_ACCOUNT or not claims.get('email_verified'):
             raise ValueError('Wrong worker identity')
     except Exception:
+        from app.services import audit
+        audit.record('auth.worker.rejected', actor='anonymous', status='denied', request=request)
         raise HTTPException(401,'Invalid worker credential') from None
 
 
 @app.post('/internal/cleanup')
 def cleanup(request: Request):
     verify_worker(request)
-    from app.services import jobs
+    from app.services import accounts, jobs
     jobs.purge_expired()
+    accounts.disable_idle_accounts()
     from app.services import chunks
     chunks.cleanup_pending()
     return {'status': 'cleaned'}

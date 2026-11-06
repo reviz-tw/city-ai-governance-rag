@@ -1,0 +1,12 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: [build, -f, backend/translation_worker/Dockerfile.patch, -t, 'asia-east1-docker.pkg.dev/$PROJECT_ID/haystack-dev/city-translategemma:${_TAG}', .]
+images:
+  - asia-east1-docker.pkg.dev/$PROJECT_ID/haystack-dev/city-translategemma:${_TAG}
+substitutions:
+  _TAG: translation-20261104c
+timeout: 1200s
+options:
+  machineType: E2_HIGHCPU_8
+  diskSizeGb: 100
+  logging: CLOUD_LOGGING_ONLY

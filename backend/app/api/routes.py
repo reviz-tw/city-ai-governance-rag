@@ -100,7 +100,7 @@ async def api_list_documents():
         return list_governance_documents()
     except Exception as e:
         logger.error(f"獲取文件清單失敗: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="無法取得文件清單，請稍後再試。")
 
 @router.post("/documents/sync-vertex", dependencies=[Depends(require_editor)])
 async def api_sync_vertex():
@@ -111,7 +111,7 @@ async def api_sync_vertex():
         return {"success": True, "message": "已成功觸發 Vertex AI Search 增量建構任務！", "operation": op}
     except Exception as e:
         logger.error(f"觸發 Vertex AI 同步失敗: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="觸發搜尋索引同步失敗，請稍後再試。")
 
 @router.get("/documents/chunks/{filename:path}")
 async def api_get_document_chunks(filename: str):
@@ -120,13 +120,13 @@ async def api_get_document_chunks(filename: str):
         from app.pipelines.vertex_search import get_document_chunks_detail
         res = get_document_chunks_detail(filename)
         if "error" in res:
-            raise HTTPException(status_code=404, detail=res["error"])
+            raise HTTPException(status_code=404, detail="找不到指定的文件或切片資料。")
         return res
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"獲取切片資訊失敗: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="無法取得文件切片資訊，請稍後再試。")
 
 GOVERNANCE_TOPICS = [
     {

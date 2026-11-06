@@ -1,0 +1,104 @@
+{
+  "dateLocal": "2026-10-29",
+  "timezone": "Asia/Taipei",
+  "revision": "city-rag-backend-dev-b-1205b08c-44fb-4dbe-adde-daeda9c108db",
+  "mode": "progressive",
+  "configuration": {
+    "previewThinking": "LOW",
+    "fullThinking": "MEDIUM",
+    "fullOutputTokens": 8192,
+    "previewHttpTimeoutMs": 8000
+  },
+  "checks": {
+    "backendTests": 204,
+    "frontendTests": 31,
+    "typescriptAndVite": "passed",
+    "liveLanguages": [
+      "en",
+      "zh-TW"
+    ],
+    "restoredUserQuestions": 2,
+    "restoredAssistantMessages": 2,
+    "restoredErrors": 0,
+    "sourceRetrievalsPerQuestion": 1
+  },
+  "clientObservations": [
+    {
+      "language": "en",
+      "requestId": "1a5f8ffc02e847bdaa1cc160f245b5f6",
+      "firstTextMs": 5799.5,
+      "previewCompleteMs": 6903.9,
+      "fullReadyMs": 15185.9,
+      "composerReadyMs": 15240.3
+    },
+    {
+      "language": "zh-TW",
+      "requestId": "e715e099b16e4b67ac78df8630ac886a",
+      "firstTextMs": 5702.1,
+      "previewCompleteMs": 8284.3,
+      "fullReadyMs": 26403,
+      "composerReadyMs": 26446.6
+    }
+  ],
+  "requestTraces": [
+    {
+      "stages": {
+        "brief_model_first_text": 1637.3,
+        "conversation_finish": 46.85,
+        "managed_search": 2861.58,
+        "detailed_model_client_setup": 242.82,
+        "detailed_model_generation": 11027.83,
+        "authentication": 24.96,
+        "context_rewrite": 0.13,
+        "retrieval": 2911.42,
+        "managed_remote": 2648.94,
+        "legacy_passage_matching": 0.05,
+        "conversation_begin": 44.2,
+        "brief_complete": 2742.26,
+        "brief_model_generation": 2501.43,
+        "evidence_prompt": 0.58,
+        "conversation_checkpoint": 19.08,
+        "legacy_search": 2684.69,
+        "language_resolution": 1037.18,
+        "managed_catalog_permissions": 72.47,
+        "brief_model_client_setup": 237.9,
+        "detailed_wait_after_preview": 8279.39,
+        "managed_result_verification": 109.83,
+        "legacy_catalog_lookup": 14.04
+      },
+      "request_id": "1a5f8ffc02e847bdaa1cc160f245b5f6",
+      "event": "rag_request",
+      "total_ms": 15152.45,
+      "status": "completed"
+    },
+    {
+      "total_ms": 26375.64,
+      "request_id": "e715e099b16e4b67ac78df8630ac886a",
+      "stages": {
+        "conversation_checkpoint": 21.73,
+        "authentication": 11.16,
+        "language_resolution": 0.25,
+        "retrieval": 2716.87,
+        "brief_model_first_text": 1565.16,
+        "managed_catalog_permissions": 28.58,
+        "context_rewrite": 1266.76,
+        "managed_result_verification": 196.05,
+        "managed_search": 2700.39,
+        "detailed_model_generation": 22260.19,
+        "detailed_wait_after_preview": 18193.82,
+        "brief_complete": 4071.14,
+        "managed_remote": 2449.87,
+        "conversation_finish": 36.8,
+        "brief_model_generation": 4070.7,
+        "legacy_catalog_lookup": 14.77,
+        "legacy_search": 2490,
+        "conversation_begin": 33.93,
+        "evidence_prompt": 0.52,
+        "legacy_passage_matching": 0.06
+      },
+      "status": "completed",
+      "event": "rag_request"
+    }
+  ],
+  "limitations": "Two live samples demonstrate ordering and persistence, not p95 or an SLA. Each question uses two answer generations with one shared evidence retrieval."
+}

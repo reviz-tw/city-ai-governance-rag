@@ -30,7 +30,7 @@ def get(document_id: str, user: User | None = None, *, edit=False):
         return doc
 
 
-def extract(data: bytes, filename: str):
+def extract(data: bytes, filename: str, *, max_text_chars=500000):
     blocks, warnings = [], []
     def add(text, page=None, kind='paragraph', cells=None, **extra):
         if text.strip():
@@ -76,7 +76,7 @@ def extract(data: bytes, filename: str):
         raise HTTPException(415, 'Supported: PDF, DOCX, UTF-8 TXT and Markdown')
     if not blocks:
         raise HTTPException(422, 'No extractable text; OCR is required')
-    if sum(len(b['text']) for b in blocks) > 500000:
+    if sum(len(b['text']) for b in blocks) > max_text_chars:
         raise HTTPException(413, 'Document exceeds the text limit')
     return blocks, warnings
 
@@ -307,28 +307,69 @@ def describe(doc, include_content=False, activity=None):
 
 def list_documents():
     user = require_user()
+    from sqlalchemy.orm import load_only, defer
     with store.session() as db:
-        visible = [d for d in db.scalars(select(store.Document)) if can_read(d, user)]
-        activity = activity_for_documents(db, [d.id for d in visible])
-        return [describe(d, activity=activity[d.id]) for d in visible]
+        headers = select(store.Document).options(load_only(
+            store.Document.id, store.Document.owner, store.Document.shared, store.Document.readers))
+        visible_ids = [d.id for d in db.scalars(headers) if can_read(d, user)]
+        activity = activity_for_documents(db, visible_ids)
+        # Stream one source at a time for the table flag. Draft text is never
+        # needed in the catalogue; loading every source/draft together exhausts RAM.
+        rows = select(store.Document).where(store.Document.id.in_(visible_ids)).options(
+            defer(store.Document.draft, raiseload=True)).execution_options(yield_per=1)
+        return [describe(d, activity=activity[d.id]) for d in db.scalars(rows)]
+
+
+def legacy_identifier(result):
+    from app.core.config import settings
+    link = result.get('link', '')
+    prefix = f'gs://{settings.GCS_BUCKET_NAME}/documents/'
+    if not link.startswith(prefix) or link.endswith('/'):
+        return None
+    return 'legacy-' + hashlib.sha256(link.encode()).hexdigest()[:32]
+
+
+def legacy_catalog_records(results):
+    """Read prepared sources only; never download, extract, or mutate while searching."""
+    from sqlalchemy.orm import load_only
+    user = require_user()
+    identifiers = [i for r in results if (i := legacy_identifier(r))]
+    with store.session() as db:
+        headers = list(db.scalars(select(store.Document).where(store.Document.id.in_(identifiers)).options(
+            load_only(store.Document.id, store.Document.owner, store.Document.shared, store.Document.readers,
+                      store.Document.published_version))))
+        missing = set(identifiers) - {d.id for d in headers}
+        allowed = [d.id for d in headers if can_read(d, user) and not d.published_version]
+        records = {d.id: d for d in db.scalars(select(store.Document).where(store.Document.id.in_(allowed)).options(
+            load_only(store.Document.id, store.Document.title, store.Document.language, store.Document.metadata_json,
+                      store.Document.original_hash, store.Document.blocks)))}
+        return records, len(missing)
 
 
 def register_legacy(result):
-    """Read-through catalogue of the pre-existing publicly served GCS collection."""
     require_user()
+    return prepare_legacy(result)
+
+
+def prepare_legacy(result):
+    """Background preparation of the restricted historical public collection."""
     link = result.get('link', '')
     from app.core.config import settings
     prefix = f'gs://{settings.GCS_BUCKET_NAME}/documents/'
     if not link.startswith(prefix):
         return None
-    identifier = 'legacy-' + hashlib.sha256(link.encode()).hexdigest()[:32]
+    identifier = legacy_identifier(result)
+    if not identifier:
+        return None
     with store.session() as db:
-        if db.get(store.Document, identifier):
+        if db.scalar(select(store.Document.id).where(store.Document.id == identifier)):
             return identifier
         filename = link.removeprefix(prefix)
         # Only this historical public collection is imported as shared.
         data = store.get_bytes(link)
-        blocks, warnings = extract(data, filename)
+        # Larger historical reports are parsed only in the isolated 2 GiB job.
+        # Interactive uploads keep their existing 500k-character limit.
+        blocks, warnings = extract(data, filename, max_text_chars=2000000)
         meta = result.get('metadata', {})
         db.add(store.Document(id=identifier, owner='legacy-public-collection', shared=True,
                              title=result['title'], language=normalize_language(meta.get('language') or detect('\n'.join(b['text'] for b in blocks)[:4000]) or 'zh-TW'),
@@ -336,7 +377,13 @@ def register_legacy(result):
                              mime='application/pdf' if filename.lower().endswith('.pdf') else 'application/octet-stream',
                              metadata_json=meta, blocks=blocks, extraction_warnings=warnings,
                              draft=baseline(blocks, reflow_pdf=filename.lower().endswith('.pdf')), index_status='legacy-index', published_version=0))
-        db.commit()
+        from sqlalchemy.exc import IntegrityError
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            if not db.scalar(select(store.Document.id).where(store.Document.id == identifier)):
+                raise
     return identifier
 
 

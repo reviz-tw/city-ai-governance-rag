@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     LOGIN_ALLOWED_EMAILS: list[str] = []
     AUTH_SESSION_SECRET: str = Field("", repr=False)
     AUTH_SESSION_SECONDS: int = 3600
+    ACCOUNT_MAX_IDLE_DAYS: int = Field(90, ge=1, le=365)
     ADMIN_EMAILS: list[str] = []
     EDITOR_EMAILS: list[str] = []
     ALLOWED_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:8080"]
@@ -49,6 +50,16 @@ class Settings(BaseSettings):
     ARTIFACT_TTL_HOURS: int = 24
     JOBS_PER_USER_HOUR: int = 10
     JOB_MAX_INPUT_CHARS: int = 100000
+    # Translation is persistent and consumed by a separate local worker, never Gemini.
+    TRANSLATION_MODEL: str = 'google/translategemma-4b-it'
+    TRANSLATION_RUNTIME: Literal['transformers', 'ollama'] = 'transformers'
+    TRANSLATION_MODEL_REVISION: str = 'main'
+    TRANSLATION_RULES_VERSION: str = 'chunk-translation-v1'
+    TRANSLATION_LANGUAGES: list[str] = ['zh-TW', 'en', 'ja', 'fr', 'es', 'ru']
+    TRANSLATION_MAX_ATTEMPTS: int = Field(3, ge=1, le=10)
+    TRANSLATION_LEASE_SECONDS: int = Field(300, ge=60)
+    TRANSLATION_INPUT_TOKENS: int = Field(1800, ge=256, le=2048)
+    TRANSLATION_OUTPUT_TOKENS: int = Field(2048, ge=256, le=4096)
     WORKER_ENABLED: bool = True
     CLOUD_TASKS_QUEUE: str = ""
     WORKER_SERVICE_ACCOUNT: str = ""

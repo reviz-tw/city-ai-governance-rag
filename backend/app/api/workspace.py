@@ -1,7 +1,7 @@
 import time
 from pathlib import Path
 from urllib.parse import quote
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Response
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Response, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -54,7 +54,10 @@ def document(document_id: str):
 @router.get('/library/{document_id}/original')
 def original(document_id: str):
     doc = documents.get(document_id)
-    return Response(store.get_bytes(doc.original_key), media_type=doc.mime,
+    data = store.get_bytes(doc.original_key)
+    # Chunked transfer avoids Cloud Run's limit on buffered HTTP/1 responses.
+    body = (data[offset:offset+1024*1024] for offset in range(0,len(data),1024*1024))
+    return StreamingResponse(body, media_type=doc.mime,
                     headers={'Content-Disposition':"attachment; filename*=UTF-8''"+quote(Path(doc.original_key).name,safe=''), 'Cache-Control':'private, no-store',
                              'X-Content-Type-Options':'nosniff'})
 
@@ -65,19 +68,63 @@ class SharingRequest(BaseModel):
 
 @router.patch('/library/{document_id}/sharing')
 def sharing(document_id: str, body: SharingRequest):
-    doc = documents.get(document_id, edit=True)
+    from app.services import audit
+    user = require_user()
+    doc = documents.get(document_id, user, edit=True)
     with store.session() as db:
         active = db.scalar(select(store.Document).where(store.Document.id==doc.id).with_for_update())
         if active.draft_revision != body.revision:
             raise HTTPException(409, 'Document changed')
+        prev_shared, prev_readers = active.shared, list(active.readers or [])
         active.shared, active.readers = body.shared, [s.strip().lower() for s in body.readers]
         active.draft_revision += 1
         db.commit()
-        return documents.describe(active, True)
+        result = documents.describe(active, True)
+    audit.record(
+        'document.sharing_updated',
+        actor=user.email,
+        target=document_id,
+        details={
+            'previous_shared': prev_shared,
+            'shared': body.shared,
+            'previous_readers_count': len(prev_readers),
+            'readers_count': len(active.readers),
+            'revision': active.draft_revision,
+        },
+    )
+    return result
 
 @router.post('/artifacts')
 def create_artifact(body: ArtifactRequest):
+    if body.kind == 'translation':
+        raise HTTPException(410, 'Translations now use the published chunk translation endpoint; reopen the source reader')
     return jobs.create(body)
+
+class TranslationRequest(BaseModel):
+    language: str
+    version: int | None = Field(None, ge=1)
+    original_hash: str | None = Field(None, max_length=64)
+    chunk_ids: list[str] = Field(default_factory=list, max_length=50)
+    block_ids: list[str] = Field(default_factory=list, max_length=50)
+
+def translation_response(document_id, language, **kwargs):
+    from app.services import translations
+    try:
+        return translations.read(document_id, language, **kwargs)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+
+@router.post('/library/{document_id}/translations')
+def request_translations(document_id: str, body: TranslationRequest):
+    return translation_response(document_id, **body.model_dump(), enqueue=True)
+
+@router.get('/library/{document_id}/translations')
+def get_translations(document_id: str, language: str, version: int | None = Query(None, ge=1),
+                     original_hash: str | None = Query(None, max_length=64),
+                     chunk_ids: list[str] = Query(default=[], max_length=50),
+                     block_ids: list[str] = Query(default=[], max_length=50)):
+    return translation_response(document_id, language, version=version, original_hash=original_hash,
+                                chunk_ids=chunk_ids, block_ids=block_ids)
 
 @router.get('/artifacts')
 def list_artifacts():

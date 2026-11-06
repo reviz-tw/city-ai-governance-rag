@@ -48,6 +48,23 @@ steps:
     args: [run, jobs, add-iam-policy-binding, city-docling-batch, '--region=${_LOCATION}', '--member=serviceAccount:59297909591-compute@developer.gserviceaccount.com', '--role=roles/run.invoker']
     id: 'authorize-docling-batch'
 
+  # Old public sources are parsed in a job before the request path becomes read-only.
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args: [run, jobs, deploy, city-legacy-catalog, '--image=${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_IMAGE_NAME}:${_TAG}', '--region=${_LOCATION}', '--command=python', '--args=-m,app.services.legacy_catalog', '--tasks=1', '--parallelism=1', '--max-retries=0', '--task-timeout=3600s', '--cpu=1', '--memory=2Gi', '--service-account=59297909591-compute@developer.gserviceaccount.com', '--env-vars-file=infra/env.dev.yaml', '--set-secrets=DATABASE_URL=${_DATABASE_SECRET}:latest', '--set-cloudsql-instances=${PROJECT_ID}:${_LOCATION}:${_SQL_INSTANCE}']
+    id: 'deploy-legacy-catalog'
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args: [run, jobs, add-iam-policy-binding, city-legacy-catalog, '--region=${_LOCATION}', '--member=serviceAccount:59297909591-compute@developer.gserviceaccount.com', '--role=roles/run.invoker']
+    id: 'authorize-legacy-catalog'
+  # One-time scheduler bootstrap is run separately by an administrator:
+  # python3 infra/configure_legacy_catalog.py PROJECT REGION RUNTIME_SERVICE_ACCOUNT
+  # The build identity does not need project-wide Scheduler administration.
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args: [run, jobs, execute, city-legacy-catalog, '--region=${_LOCATION}', '--wait']
+    id: 'prepare-legacy-catalog'
+
   # 3. Deploy to the existing service; the fixed candidate tag is only for smoke checks.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
@@ -60,7 +77,7 @@ steps:
       - '--platform=managed'
       - '--allow-unauthenticated'
       - '--port=8080'
-      - '--memory=1Gi'
+      - '--memory=2Gi'
       - '--cpu=1'
       - '--min-instances=0'
       - '--max-instances=2'
@@ -69,7 +86,7 @@ steps:
       - '--tag=candidate'
       - '--revision-suffix=b-${BUILD_ID}'
       - '--timeout=1800'
-      - '--concurrency=8'
+      - '--concurrency=4'
       - '--env-vars-file=infra/env.dev.yaml'
       - '--set-secrets=AUTH_SESSION_SECRET=${_SESSION_SECRET}:latest,DATABASE_URL=${_DATABASE_SECRET}:latest'
       - '--add-cloudsql-instances=${PROJECT_ID}:${_LOCATION}:${_SQL_INSTANCE}'

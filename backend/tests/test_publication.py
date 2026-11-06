@@ -45,6 +45,9 @@ def test_publish_requires_review_and_remote_search_visibility(source,monkeypatch
     jobs.run(task['id'])
     assert jobs.get(task['id']).status=='completed'
     assert documents.get(doc.id).published_version==1
+    from app.services import translations
+    assert translations.statistics()['queued']==len(doc.draft)*5
+    assert translations.statistics()['completed']==len(doc.draft)
     assert chunks.indexed(doc.id)['chunks'][0]['content']==doc.draft[0]['content']
     with pytest.raises(HTTPException) as exc:
         chunks.publish(doc.id,doc.draft_revision,reviewed_diff='stale')

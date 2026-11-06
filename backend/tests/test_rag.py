@@ -18,17 +18,40 @@ def retrieved(monkeypatch):
 def test_chinese_answer_does_not_filter_english_sources(retrieved,monkeypatch):
     generate=Mock(return_value='有依據的回答 [1]')
     monkeypatch.setattr(gemini,'generate',generate)
-    result=rag.query_city_governance_rag_vertex('如何管理城市人工智慧的政策風險？',interface_language='en',answer_detail='detailed')
+    result=rag.query_city_governance_rag_vertex('如何管理城市人工智慧的政策風險？',interface_language='en',answer_detail='brief')
     assert retrieved.call_args.args[2] is None
     assert result['response_language']=='zh-TW'
     assert result['sources'][0]['language']=='en'
     assert 'Evidence in English.' in generate.call_args.args[0]
 
 
-def test_filters_escape_city_and_expand_legacy_language():
-    assert rag.build_filter(languages=['en'])=='language: ANY("en")'
-    assert '"zh"' in rag.build_filter(languages=['zh-TW'])
-    assert '\\"' in rag.build_filter(city='a" OR b')
+def test_inferred_city_is_a_search_term_not_a_document_filter(retrieved,monkeypatch):
+    monkeypatch.setattr(rag, 'prepare', lambda *args: dict(
+        retrieval_query='AI participation',city='Bogotá',preferred_language=None,
+        recent_languages=[],history=[],summary=''))
+    rag.prepare_rag('Any cases about Bogotá?')
+    assert 'Bogotá' in retrieved.call_args.args[0]
+    assert retrieved.call_args.args[1] is None
+    rag.prepare_rag('AI participation',city_filter='Taipei')
+    assert retrieved.call_args.args[1] == 'Taipei'
+
+
+@pytest.mark.parametrize('city,languages,expected',[
+    (None,None,['bogota','taipei']),('Bogotá',None,['bogota']),
+    (None,['en'],['bogota']),('Bogotá',['ja'],[]),
+])
+def test_legacy_scope_uses_catalogue_without_unsupported_remote_filters(monkeypatch,city,languages,expected):
+    from app.services import chunks,documents
+    monkeypatch.setattr(chunks,'search',lambda *args:[])
+    results=[dict(id=name,title=name,snippets=[],metadata={}) for name in ['bogota','taipei']]
+    remote=Mock(return_value=results)
+    monkeypatch.setattr(rag,'search_vertex_data_store',remote)
+    monkeypatch.setattr(documents,'legacy_identifier',lambda result:result['id'])
+    docs={'bogota':SimpleNamespace(title='Bogotá',published_version=0,metadata_json={'city':'Bogotá'},language='en',original_hash='a',blocks=[]),
+          'taipei':SimpleNamespace(title='Taipei',published_version=0,metadata_json={'city':'Taipei'},language='zh-TW',original_hash='b',blocks=[])}
+    monkeypatch.setattr(documents,'legacy_catalog_records',lambda results:(docs,0))
+    assert [r['id'] for r in rag.retrieve('AI governance',city,languages)]==expected
+    assert not remote.call_args.kwargs.get('filter_expr')
 
 
 def test_fallback_respects_scope(monkeypatch):
@@ -76,6 +99,22 @@ def test_empty_results_return_localized_message_without_generation(monkeypatch,d
     assert events[-1]['status']=='completed'
     generate.assert_not_called()
     stream.assert_not_called()
+
+
+@pytest.mark.parametrize('pending',[0,1])
+def test_results_without_usable_passages_distinguish_pending_sources(monkeypatch,pending):
+    monkeypatch.setattr(gemini,'generate',Mock(side_effect=AssertionError('Must not generate')))
+    monkeypatch.setattr(gemini,'stream',Mock(side_effect=AssertionError('Must not generate')))
+    monkeypatch.setattr(rag,'retrieve',lambda *a:rag.RetrievalResults([
+        {'id':'empty','title':'Empty passage','snippets':[{'snippet':'<b> </b>'}]}],pending))
+    events=[json.loads(e.removeprefix('data: ')) for e in rag.stream_city_governance_rag_vertex(
+        'What policy is supported?',response_language='zh-TW')]
+    if pending:
+        assert events[-1]['status']=='failed'
+        assert events[-2]['message']==rag.PREPARATION_ERRORS['zh-TW']
+    else:
+        assert events[-1]['status']=='completed'
+        assert events[-2]['text']==rag.NO_RESULTS_MESSAGES['zh-TW']
 
 
 def test_cleaner_uses_shared_sdk_and_validated_json(monkeypatch):
@@ -151,3 +190,23 @@ def test_empty_passages_return_no_results(monkeypatch):
     events=[json.loads(e.removeprefix("data: ")) for e in rag.stream_city_governance_rag_vertex("What is the AI policy?", response_language="en")]
     assert events[-1]["status"]=="completed"
     assert events[-2]["text"]==rag.NO_RESULTS_MESSAGES["en"]
+
+
+def test_persisted_followup_uses_retrieval_only_schema_without_dropping_context(monkeypatch):
+    from app.services.context import RetrievalPlan,ContextPlan
+    generate=Mock(return_value=json.dumps({'retrieval_query':'新北市人工智慧風險管理規範','city':'新北'}))
+    monkeypatch.setattr(gemini,'generate',generate)
+    context=ResearchContext(persisted=True,city='台北',summary='已追溯摘要',history=[
+        HistoryMessage(id='u',role='user',content='台北市人工智慧風險管理規範')])
+    result=prepare('那新北呢？',context)
+    assert result['city']=='新北' and '新北' in result['retrieval_query']
+    assert result['summary']=='已追溯摘要' and result['history'][0]['id']=='u'
+    assert generate.call_args.args[2] is RetrievalPlan
+    assert 'summary' not in RetrievalPlan.model_json_schema()['properties']
+    assert generate.call_args.kwargs['max_output_tokens']==512
+    assert generate.call_args.kwargs['cleaner'] is True
+    generate.return_value=json.dumps({'retrieval_query':'New Taipei policy','city':'新北','summary':'explicit external summary'})
+    external=prepare('那新北呢？',ResearchContext(history=context.history))
+    assert generate.call_args.args[2] is ContextPlan
+    assert generate.call_args.kwargs['max_output_tokens']==1024
+    assert external['summary']=='explicit external summary'

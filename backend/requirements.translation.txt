@@ -1,0 +1,6 @@
+# Install only on the local translation worker, alongside backend/requirements.txt.
+# The web/Cloud Run image must not load model weights.
+torch>=2.6,<3
+transformers>=4.57,<5
+accelerate>=1.2,<2
+sentencepiece>=0.2,<0.3

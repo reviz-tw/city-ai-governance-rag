@@ -13,6 +13,23 @@ export interface Citation {
   page_end?: number;
 }
 
+export interface ChunkTranslationResult {
+  document_id: string;
+  version: number;
+  source_language: string;
+  language: string;
+  complete: boolean;
+  chunks: Array<{
+    chunk_id:string;
+    original:string;
+    refs:Array<{block_id:string;start:number;end:number;page:number|null}>;
+    status:'missing'|'queued'|'running'|'completed'|'failed'|'blocked';
+    text:string|null;
+    error:string|null;
+    attempts:number;
+  }>;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';

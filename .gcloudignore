@@ -8,6 +8,10 @@ infra/*
 !infra/cloudbuild.web.yaml
 !infra/Dockerfile.web
 !infra/cloudbuild.docling.yaml
+!infra/cloudbuild.translation.yaml
+!infra/cloudbuild.translation.patch.yaml
+!infra/deploy_translation.py
+!infra/translation_overlay.py
 !infra/env.dev.yaml
 !infra/verify_deployment.py
 !infra/configure_legacy_catalog.py
@@ -18,6 +22,8 @@ backend/*
 !backend/app/**
 !backend/docling_worker/
 !backend/docling_worker/**
+!backend/translation_worker/
+!backend/translation_worker/**
 !backend/tests/
 !backend/tests/**
 !web/

@@ -148,6 +148,19 @@ export const PANEL_COPY = {
   confirmOutput:['確認內容並產出','Confirm and export','確認して出力','Valider et exporter','Confirmar y exportar','Подтвердить и экспортировать'],
   translationNote:['AI 輔助譯文，請對照原文確認。','AI-assisted translation. Check it against the original.','AI による翻訳です。原文と照合してください。','Traduction assistée par IA. Vérifiez avec l’original.','Traducción asistida por IA. Compruébela con el original.','Перевод с помощью ИИ. Сверяйте с оригиналом.'],
   translationComplete:['選定段落翻譯完成。','Selected passages translated.','選択した段落の翻訳が完了しました。','Passages sélectionnés traduits.','Pasajes seleccionados traducidos.','Выбранные фрагменты переведены.'],
+  translationProgress:['譯文已就緒：{done}／{total} 段','Translations ready: {done}/{total}','翻訳済み：{done}/{total}','Traductions prêtes : {done}/{total}','Traducciones listas: {done}/{total}','Готово переводов: {done}/{total}'],
+  translationWaiting:['等待背景翻譯；原文可先閱讀。','Waiting for the translation worker. You can read the original.','バックグラウンド翻訳待ちです。原文をお読みいただけます。','En attente de traduction. Vous pouvez lire l’original.','En espera de traducción. Puede leer el original.','Ожидает перевода. Можно читать оригинал.'],
+  translationRunning:['正在翻譯這個段落。','Translating this passage.','この段落を翻訳しています。','Traduction de ce passage en cours.','Traduciendo este pasaje.','Перевод этого фрагмента выполняется.'],
+  translationFailed:['此段翻譯已停止，需重新處理；其他譯文仍可閱讀。','Translation stopped for this passage and needs reprocessing. Other translations remain available.','この段落の翻訳は停止しました。再処理が必要です。他の翻訳は閲覧できます。','La traduction de ce passage est arrêtée et doit être relancée. Les autres traductions restent disponibles.','La traducción de este pasaje se detuvo y requiere reprocesamiento. Las demás siguen disponibles.','Перевод этого фрагмента остановлен и требует повторной обработки. Остальные переводы доступны.'],
+  translationNumbers:['譯文中的數字未通過核對。','Numbers in the translation did not match the source.','訳文の数値が原文と一致しませんでした。','Les nombres traduits ne correspondent pas à la source.','Los números traducidos no coinciden con el original.','Числа в переводе не совпали с оригиналом.'],
+  translationLinks:['譯文中的來源連結未通過核對。','Source links were not preserved.','原文のリンクが保持されませんでした。','Les liens sources n’ont pas été conservés.','No se conservaron los enlaces originales.','Исходные ссылки не сохранены.'],
+  translationStructure:['表格欄列結構未通過核對。','Table rows or columns did not match.','表の行・列が一致しませんでした。','La structure du tableau ne correspond pas.','La estructura de la tabla no coincide.','Структура таблицы не совпала.'],
+  translationEmpty:['模型沒有回傳譯文。','The model returned no translation.','モデルが訳文を返しませんでした。','Le modèle n’a renvoyé aucune traduction.','El modelo no devolvió una traducción.','Модель не вернула перевод.'],
+  translationTruncated:['段落超出模型處理長度，需要拆小後重試。','The passage exceeded the model limit and needs smaller segments.','モデルの長さ制限を超えました。短い部分に分割する必要があります。','Le passage dépasse la limite du modèle et doit être découpé.','El pasaje supera el límite del modelo y debe dividirse.','Фрагмент превышает лимит модели и требует разделения.'],
+  translationModelUnavailable:['本地翻譯模型暫時無法處理。','The local translation model could not process this passage.','ローカル翻訳モデルで処理できませんでした。','Le modèle local n’a pas pu traiter ce passage.','El modelo local no pudo procesar este pasaje.','Локальная модель не смогла обработать фрагмент.'],
+  translationInterrupted:['背景翻譯中斷，工作已保留供續跑。','The worker was interrupted. The task is saved for resumption.','処理が中断されました。再開用に保存されています。','Le traitement a été interrompu. La tâche est conservée pour reprise.','El proceso se interrumpió. La tarea se guardó para reanudarla.','Обработка прервана. Задача сохранена для продолжения.'],
+  translationUnpublished:['此文件尚未發布切片版本，暫時只能閱讀原文。','This document has no published chunks yet. The original remains available.','公開済みチャンクがありません。原文を閲覧できます。','Aucun segment publié pour ce document. L’original reste disponible.','Este documento aún no tiene segmentos publicados. El original sigue disponible.','У документа ещё нет опубликованных фрагментов. Оригинал доступен.'],
+  translationLegacy:['請重新開啟來源閱讀器，查看持久保存的切片譯文。','Reopen the source reader to view saved chunk translations.','原文ビューアーを開き直して保存済みの翻訳をご覧ください。','Rouvrez la source pour consulter les traductions enregistrées.','Vuelva a abrir el lector para ver las traducciones guardadas.','Откройте источник заново для просмотра сохранённых переводов.'],
   translationPartial:['部分段落仍在翻譯中。','Some passages are still being translated.','一部の段落は翻訳中です。','Certains passages sont encore en cours de traduction.','Algunos pasajes aún se están traduciendo.','Некоторые фрагменты ещё переводятся.'],
   original:['原文','Original','原文','Original','Original','Оригинал'],
   chartPreview:['圖表預覽','Chart preview','図表プレビュー','Aperçu du graphique','Vista previa del gráfico','Предпросмотр диаграммы'],
@@ -264,6 +277,9 @@ export function panelText(lang:InterfaceLanguage, key:PanelKey, params:Record<st
 }
 export function panelError(error:unknown):PanelKey {
   const message=String((error as Error)?.message||'');
+  if(message==='Publish this document before requesting chunk translations')return 'translationUnpublished';
+  if(message==='Source version changed; open the current citation')return 'stale';
+  if(message.includes('persistent chunk translations')||message.includes('published chunk translation endpoint'))return 'translationLegacy';
   const accountErrors:Record<string,PanelKey>={
     'Account already exists':'accountExists',
     'Keep at least one active administrator':'keepAdmin',

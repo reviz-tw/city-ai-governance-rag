@@ -54,6 +54,49 @@ class DocumentReview(Base):
     reviewer_email: Mapped[str] = mapped_column(String(320))
     reviewed_at: Mapped[float] = mapped_column(Float, default=time.time)
 
+class ChunkTranslation(Base):
+    """One durable translation per immutable chunk/version/language/engine contract."""
+    __tablename__ = 'chunk_translations'
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    document_id: Mapped[str] = mapped_column(String(100), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    chunk_id: Mapped[str] = mapped_column(String(100))
+    source_hash: Mapped[str] = mapped_column(String(64), index=True)
+    source_language: Mapped[str] = mapped_column(String(20))
+    language: Mapped[str] = mapped_column(String(20), index=True)
+    model: Mapped[str] = mapped_column(String(200))
+    model_revision: Mapped[str] = mapped_column(String(100))
+    rules_version: Mapped[str] = mapped_column(String(100))
+    status: Mapped[str] = mapped_column(String(30), default='queued', index=True)
+    text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    priority: Mapped[int] = mapped_column(Integer, default=0)
+    lease_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lease_until: Mapped[float] = mapped_column(Float, default=0)
+    retry_at: Mapped[float] = mapped_column(Float, default=0)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+class TranslationDiagnostic(Base):
+    """Operator-only failed segment samples; never served by translation APIs."""
+    __tablename__ = 'translation_diagnostics'
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    language: Mapped[str] = mapped_column(String(20), index=True)
+    document_id: Mapped[str] = mapped_column(String(100))
+    chunk_id: Mapped[str] = mapped_column(String(100))
+    payload: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+
+class TranslationBatch(Base):
+    """A model outage stops subsequent tasks in the same finite execution."""
+    __tablename__ = 'translation_batches'
+    id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    halted: Mapped[bool] = mapped_column(Boolean, default=False)
+    reason: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+
 class Job(Base):
     __tablename__ = 'jobs'
     id: Mapped[str] = mapped_column(String(100), primary_key=True)
@@ -90,9 +133,30 @@ def session():
 
 def initialize():
     Base.metadata.create_all(engine())
+    _ensure_account_columns()
     from app.services.accounts import bootstrap
     bootstrap()
     Path(settings.ARTIFACT_STORAGE_DIR).mkdir(parents=True, exist_ok=True)
+
+
+def _ensure_account_columns():
+    from sqlalchemy import inspect, text
+    eng = engine()
+    inspector = inspect(eng)
+    if not inspector.has_table('workspace_accounts'):
+        return
+    existing = {c['name'] for c in inspector.get_columns('workspace_accounts')}
+    alterations = [
+        ('last_active_at', 'FLOAT'),
+        ('updated_at', 'FLOAT'),
+        ('updated_by', 'VARCHAR(320)'),
+    ]
+    missing = [(col, col_type) for col, col_type in alterations if col not in existing]
+    if not missing:
+        return
+    with eng.begin() as conn:
+        for col, col_type in missing:
+            conn.execute(text(f'ALTER TABLE workspace_accounts ADD COLUMN {col} {col_type}'))
 
 
 def put_bytes(key: str, data: bytes, mime: str):
@@ -175,6 +239,22 @@ class WorkspaceAccount(Base):
     role: Mapped[str] = mapped_column(String(20))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    last_active_at: Mapped[float | None] = mapped_column(Float, nullable=True, default=time.time)
+    updated_at: Mapped[float | None] = mapped_column(Float, nullable=True, default=time.time)
+    updated_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
+
+class AuditLog(Base):
+    __tablename__ = 'audit_logs'
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    action: Mapped[str] = mapped_column(String(80), index=True)
+    actor: Mapped[str] = mapped_column(String(320), index=True)
+    target: Mapped[str] = mapped_column(String(320), default='')
+    status: Mapped[str] = mapped_column(String(30), default='succeeded')
+    source_ip: Mapped[str] = mapped_column(String(100), default='')
+    path: Mapped[str] = mapped_column(String(300), default='')
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+    entry_hash: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[float] = mapped_column(Float, default=time.time, index=True)
 
 class AccountInitialization(Base):
     __tablename__ = 'account_initialization'
